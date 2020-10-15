@@ -7,616 +7,616 @@ import "tokens.vo";
 import "util.vo";
 
 export struct Lexer {
-    buff: *i8; // null terminated
+	buff: *i8; // null terminated
 
-    position: size_t = 0;
-    column:   size_t = 0;
-    line:     size_t = 1;
+	position: size_t = 0;
+	column:   size_t = 0;
+	line:	 size_t = 1;
 
-    func peek(self: *Lexer) i8 {
-        return *(self.buff + self.position);
-    };
-    func peek16(self: *Lexer) i16 {
-        return *(cast(*i16)(self.buff + self.position));
-    };
-    func peek32(self: *Lexer) i32 {
-        return *(cast(*i32)(self.buff + self.position));
-    };
-    func eat(self: *Lexer) {
-        ++self.position;
-        ++self.column;
-    };
-    func eat16(self: *Lexer) {
-        self.position += sizeof(u16);
-        self.column += sizeof(u16);
-    };
-    func eat32(self: *Lexer) {
-        self.position += sizeof(u32);
-        self.column += sizeof(u32);
-    };
-    func shiftLine(self: *Lexer) {
-        ++self.position;
-        ++self.line;
-        self.column = 0;
-    };
-    func error(self: *Lexer, msg: *i8) {
-        io.print("Error: ");
-        io.println(msg);
-    };
-    func assert(self: *Lexer, cond: bool, msg: *i8){
-        if cond {
-            return;
-        }
-        self.error(msg);
-    };
-    func expect(self: *Lexer, c: i8) i8 {
-        char := self.peek();
-        self.assert(char == c, "exepcted {c}, got {char}.");
-        return c;
-    };
-    func tok(self: *Lexer) tokens.Token {
-        return (tokens.Token){buff: self.buff + self.position, line: self.line, column: self.column};
-    };
-    func prepRead(self: *Lexer) bool {
-        c, c2: i8, i16;
-        p := self.position;
+	func peek(self: *Lexer) i8 {
+		return *(self.buff + self.position);
+	};
+	func peek16(self: *Lexer) i16 {
+		return *(cast(*i16)(self.buff + self.position));
+	};
+	func peek32(self: *Lexer) i32 {
+		return *(cast(*i32)(self.buff + self.position));
+	};
+	func eat(self: *Lexer) {
+		++self.position;
+		++self.column;
+	};
+	func eat16(self: *Lexer) {
+		self.position += sizeof(u16);
+		self.column += sizeof(u16);
+	};
+	func eat32(self: *Lexer) {
+		self.position += sizeof(u32);
+		self.column += sizeof(u32);
+	};
+	func shiftLine(self: *Lexer) {
+		++self.position;
+		++self.line;
+		self.column = 0;
+	};
+	func error(self: *Lexer, msg: *i8) {
+		io.print("Error: ");
+		io.println(msg);
+	};
+	func assert(self: *Lexer, cond: bool, msg: *i8){
+		if cond {
+			return;
+		}
+		self.error(msg);
+	};
+	func expect(self: *Lexer, c: i8) i8 {
+		char := self.peek();
+		self.assert(char == c, "exepcted {c}, got {char}.");
+		return c;
+	};
+	func tok(self: *Lexer) tokens.Token {
+		return (tokens.Token){buff: self.buff + self.position, line: self.line, column: self.column};
+	};
+	func prepRead(self: *Lexer) bool {
+		c, c2: i8, i16;
+		p := self.position;
 
-    label loop:
-        c, c2 = self.peek(), self.peek16();
+	label loop:
+		c, c2 = self.peek(), self.peek16();
 
-        if util.isWhitespace(c) {
-            self.eat();
-        } else if c == '\n' {
-            self.shiftLine();
-        } else if (('/' << 8) | '/') == c2 {
-            self.skipUntilNewline();
-        } else if (('*' << 8) | '/') == c2 {
-            self.skipMultilineComment();
-        } else {
-            return p != self.position;
-        }
-        goto loop;
-    };
-    func skipUntilNewline(self: *Lexer) {
-        self.position += 2;
-        for c := self.peek(); c != '\n'; c = self.peek() {
-            ++self.position;
-        }
-        self.shiftLine();
-    };
-    func skipMultilineComment(self: *Lexer) {
-        c: i8;
-        
-    label loop:
-        c = self.peek();
+		if util.isWhitespace(c) {
+			self.eat();
+		} else if c == '\n' {
+			self.shiftLine();
+		} else if (('/' << 8) | '/') == c2 {
+			self.skipUntilNewline();
+		} else if (('*' << 8) | '/') == c2 {
+			self.skipMultilineComment();
+		} else {
+			return p != self.position;
+		}
+		goto loop;
+	};
+	func skipUntilNewline(self: *Lexer) {
+		self.position += 2;
+		for c := self.peek(); c != '\n'; c = self.peek() {
+			++self.position;
+		}
+		self.shiftLine();
+	};
+	func skipMultilineComment(self: *Lexer) {
+		c: i8;
+		
+	label loop:
+		c = self.peek();
 
-        if c != '\n' {
-            self.eat();
-        } else if c != '*' {
-            self.shiftLine();
-            goto loop;
-        }
+		if c != '\n' {
+			self.eat();
+		} else if c != '*' {
+			self.shiftLine();
+			goto loop;
+		}
 
-        if c != '*' {
-            goto loop;
-        }
-        if self.peek() == '/' {
-            self.eat();
-            return;
-        }
-        goto loop;
-    };
-    func next(self: *Lexer) tokens.Token {
-        tok := self.nextRaw();
-        if tok.pType != tokens.PTokenType.SPACE {
-            return tok;
-        }
-        return self.nextRaw();
-    };
-    func nextRaw(self: *Lexer) tokens.Token {
-        tok, c, c2 := self.tok(), self.peek(), self.peek16();
-        
-        if util.isIdentBegining(c) {
-            self.identifier(&tok);
-        } else if self.delimiter(&tok) {
-            return tok;
-        } else if self.prepRead() {
-            tok.pType = tokens.PTokenType.SPACE;
-            tok.len = (self.buff + self.position) - tok.buff;
-        } else if self.operator(&tok) {
-            return tok;
-        } else if util.isStringDelimiter(c) {
-            self.string(&tok);
-        } else if util.isCharDelimiter(c) {
-            self.char(&tok);
-        } else if c == '0' {
-            self.numZero(&tok);  
-        } else if util.isNumDec(c) {
-            self.number(&tok);
-        } else if c == 0 {
-            tok.pType = tokens.PTokenType.EOF;
-        } else {
-            self.error("unknown char\n\n");
-            tok.pType = tokens.PTokenType.EOF;
-        }
-        
-        return tok;
-    };
-    func escapeSequence(self: *Lexer) u8 {
-        self.eat();
-        char := self.peek();
+		if c != '*' {
+			goto loop;
+		}
+		if self.peek() == '/' {
+			self.eat();
+			return;
+		}
+		goto loop;
+	};
+	func next(self: *Lexer) tokens.Token {
+		tok := self.nextRaw();
+		if tok.pType != tokens.PTokenType.SPACE {
+			return tok;
+		}
+		return self.nextRaw();
+	};
+	func nextRaw(self: *Lexer) tokens.Token {
+		tok, c, c2 := self.tok(), self.peek(), self.peek16();
+		
+		if util.isIdentBegining(c) {
+			self.identifier(&tok);
+		} else if self.delimiter(&tok) {
+			return tok;
+		} else if self.prepRead() {
+			tok.pType = tokens.PTokenType.SPACE;
+			tok.len = (self.buff + self.position) - tok.buff;
+		} else if self.operator(&tok) {
+			return tok;
+		} else if util.isStringDelimiter(c) {
+			self.string(&tok);
+		} else if util.isCharDelimiter(c) {
+			self.char(&tok);
+		} else if c == '0' {
+			self.numZero(&tok);  
+		} else if util.isNumDec(c) {
+			self.number(&tok);
+		} else if c == 0 {
+			tok.pType = tokens.PTokenType.EOF;
+		} else {
+			self.error("unknown char\n\n");
+			tok.pType = tokens.PTokenType.EOF;
+		}
+		
+		return tok;
+	};
+	func escapeSequence(self: *Lexer) u8 {
+		self.eat();
+		char := self.peek();
 
-        switch char {
-        case 'n':
-        case '"':
-        case '\'':
-        case 't':
-        case 'r':
-        case '\\':
-            self.eat();
-            return 2;
-        case 'u':
-            self.eat();
-            self.checkHexLit(4);
-            return 6;
-        case 'U':
-            self.eat();
-            self.checkHexLit(8);
-            return 10;
-        case 0:
-            self.error("expected escape sequence, got eof.");
-            break;
-        }
-        self.error("Invalid character in escape sequence.");
-        return 0;
-    };
-    func checkHexLit(self: *Lexer, size: i32) {
-        i: i32;
-        for i = 0; util.isNumHex(self.peek()); ++i {
-            self.eat();
-        }
-        self.assert(i == size, "Invalid character in hex literal");
-    };
-    func string(self: *Lexer, tok: *tokens.Token) {
-        self.eat();
+		switch char {
+		case 'n':
+		case '"':
+		case '\'':
+		case 't':
+		case 'r':
+		case '\\':
+			self.eat();
+			return 2;
+		case 'u':
+			self.eat();
+			self.checkHexLit(4);
+			return 6;
+		case 'U':
+			self.eat();
+			self.checkHexLit(8);
+			return 10;
+		case 0:
+			self.error("expected escape sequence, got eof.");
+			break;
+		}
+		self.error("Invalid character in escape sequence.");
+		return 0;
+	};
+	func checkHexLit(self: *Lexer, size: i32) {
+		i: i32;
+		for i = 0; util.isNumHex(self.peek()); ++i {
+			self.eat();
+		}
+		self.assert(i == size, "Invalid character in hex literal");
+	};
+	func string(self: *Lexer, tok: *tokens.Token) {
+		self.eat();
 
-        tok.len = 1;
-        tok.pType = tokens.PTokenType.STR_LIT;
-        
-        char := self.peek();
+		tok.len = 1;
+		tok.pType = tokens.PTokenType.STR_LIT;
+		
+		char := self.peek();
 
-    label loop:
-        if util.isStringDelimiter(char) {
-            self.eat();
-            tok.len++;
-            return;
-        } else if char == 0 {
-            self.error("expected string delimiter, got eof.");
-        } else if char == '\n' {
-            self.error("expected string delimiter, got end of line.");
-        } else if char == '\\' {
-            tok.len += self.escapeSequence();
-        } else {
-            self.eat();
-            tok.len++;
-        }
-        char = self.peek();
-        goto loop;
-    };
-    func char(self: *Lexer, tok: *tokens.Token) {
-        self.eat();
+	label loop:
+		if util.isStringDelimiter(char) {
+			self.eat();
+			tok.len++;
+			return;
+		} else if char == 0 {
+			self.error("expected string delimiter, got eof.");
+		} else if char == '\n' {
+			self.error("expected string delimiter, got end of line.");
+		} else if char == '\\' {
+			tok.len += self.escapeSequence();
+		} else {
+			self.eat();
+			tok.len++;
+		}
+		char = self.peek();
+		goto loop;
+	};
+	func char(self: *Lexer, tok: *tokens.Token) {
+		self.eat();
 
-        char := self.peek();
-        tok.pType = tokens.PTokenType.CHAR_LIT;
+		char := self.peek();
+		tok.pType = tokens.PTokenType.CHAR_LIT;
 
-        switch char {
-        case 0:
-            self.error("expected char, got eof");
-            break;
-        case '\n':
-            self.error("expected char, got end of line");
-            break;
-        case '\\':
-            tok.len = self.escapeSequence() + 2;
-            break;
-        default:
-            tok.len = self.utf8Char() + 2;
-            break;
-        }
+		switch char {
+		case 0:
+			self.error("expected char, got eof");
+			break;
+		case '\n':
+			self.error("expected char, got end of line");
+			break;
+		case '\\':
+			tok.len = self.escapeSequence() + 2;
+			break;
+		default:
+			tok.len = self.utf8Char() + 2;
+			break;
+		}
 
-        self.expect('\'');
-        self.eat();
-    };
-    func utf8Char(self: *Lexer) size_t {
-        c := self.peek32();
-        
-        if ((c >> 0x18) & 0x80) == 0 {
-            self.eat();
-            return 1;
-        } else if ((c >> 0x10) & 0xc0c0) == 0xc080 {
-            self.eat16();
-            return 2;
-        } else if ((c >> 0x8)  & 0xe0c0c0) == 0xe08080 {
-            self.eat();
-            self.eat16();
-            return 3;
-        } else if (c & 0xf0c0c0c0) == 0xf0808080 {
-            self.eat32();
-            return 4;
-        }
-        
-        self.error("invalid unicode char");
-        return 0;
-    };
-    func identifier(self: *Lexer, tok: *tokens.Token) {
-        ++tok.len;
-        self.eat();
+		self.expect('\'');
+		self.eat();
+	};
+	func utf8Char(self: *Lexer) size_t {
+		c := self.peek32();
+		
+		if ((c >> 0x18) & 0x80) == 0 {
+			self.eat();
+			return 1;
+		} else if ((c >> 0x10) & 0xc0c0) == 0xc080 {
+			self.eat16();
+			return 2;
+		} else if ((c >> 0x8)  & 0xe0c0c0) == 0xe08080 {
+			self.eat();
+			self.eat16();
+			return 3;
+		} else if (c & 0xf0c0c0c0) == 0xf0808080 {
+			self.eat32();
+			return 4;
+		}
+		
+		self.error("invalid unicode char");
+		return 0;
+	};
+	func identifier(self: *Lexer, tok: *tokens.Token) {
+		++tok.len;
+		self.eat();
 
-        for char := self.peek(); util.isIdentPart(char); char = self.peek() {
-            ++tok.len;
-            self.eat();
-        }
-        if i := util.findKeyword(tok.buff, tok.len); i != tokens.KeywordsNum {
-            tok.pType = tokens.PTokenType.KEYWORD;
-            tok.sType = cast(tokens.STokenType)i;
-        } else {
-            tok.pType = tokens.PTokenType.IDENT;
-        }
-    };
-    func numBi(self: *Lexer) {
-        for c := self.peek(); util.isNumBi(c); c = self.peek() {
-            self.eat();
-        }
-    };
-    func numOct(self: *Lexer) {
-        for c := self.peek(); util.isNumOct(c); c = self.peek() {
-            self.eat();
-        }
-    };
-    func numDec(self: *Lexer) {
-        for c := self.peek(); util.isNumDec(c); c = self.peek() {
-            self.eat();
-        }
-    };
-    func numHex(self: *Lexer) {
-        for c := self.peek(); util.isNumHex(c); c = self.peek() {
-            self.eat();
-        }
-    };
-    func numZero(self: *Lexer, tok: *tokens.Token) {
-        tok.pType = tokens.PTokenType.NUM_LIT;
+		for char := self.peek(); util.isIdentPart(char); char = self.peek() {
+			++tok.len;
+			self.eat();
+		}
+		if i := util.findKeyword(tok.buff, tok.len); i != tokens.KeywordsNum {
+			tok.pType = tokens.PTokenType.KEYWORD;
+			tok.sType = cast(tokens.STokenType)i;
+		} else {
+			tok.pType = tokens.PTokenType.IDENT;
+		}
+	};
+	func numBi(self: *Lexer) {
+		for c := self.peek(); util.isNumBi(c); c = self.peek() {
+			self.eat();
+		}
+	};
+	func numOct(self: *Lexer) {
+		for c := self.peek(); util.isNumOct(c); c = self.peek() {
+			self.eat();
+		}
+	};
+	func numDec(self: *Lexer) {
+		for c := self.peek(); util.isNumDec(c); c = self.peek() {
+			self.eat();
+		}
+	};
+	func numHex(self: *Lexer) {
+		for c := self.peek(); util.isNumHex(c); c = self.peek() {
+			self.eat();
+		}
+	};
+	func numZero(self: *Lexer, tok: *tokens.Token) {
+		tok.pType = tokens.PTokenType.NUM_LIT;
 
-        p := self.position;
-        self.eat();
-        
-        switch next := self.peek(); next {
-        case 'b':
-            self.eat();
-            self.numBi();
-            goto end;
-        case 'o':
-            self.eat();
-            self.numOct();
-            goto end;
-        case 'x':
-            self.eat();
-            self.numHex();
-            goto end;
-        }
+		p := self.position;
+		self.eat();
+		
+		switch next := self.peek(); next {
+		case 'b':
+			self.eat();
+			self.numBi();
+			goto end;
+		case 'o':
+			self.eat();
+			self.numOct();
+			goto end;
+		case 'x':
+			self.eat();
+			self.numHex();
+			goto end;
+		}
 
-        // self.eat();
-        c: u8;
+		// self.eat();
+		c: u8;
 
-        for c = self.peek(); c == '0'; c = self.peek() {
-            self.eat();
-        }
+		for c = self.peek(); c == '0'; c = self.peek() {
+			self.eat();
+		}
 
-        if !util.isNumDec(c) {
-            p = self.position - 1;
-            tok.buff = self.buff + p;
-            tok.len = 1;
-            return;
-        } else {
-            p = self.position;
-            tok.buff = self.buff + p;
-            self.eat();
-            self.numDec();
-        }
+		if !util.isNumDec(c) {
+			p = self.position - 1;
+			tok.buff = self.buff + p;
+			tok.len = 1;
+			return;
+		} else {
+			p = self.position;
+			tok.buff = self.buff + p;
+			self.eat();
+			self.numDec();
+		}
 
-    label end:
-        tok.len = self.position - p;
-    };
-    func number(self: *Lexer, tok: *tokens.Token) {
-        tok.pType = tokens.PTokenType.NUM_LIT;
-        
-        p := self.position;
-        self.numDec();
+	label end:
+		tok.len = self.position - p;
+	};
+	func number(self: *Lexer, tok: *tokens.Token) {
+		tok.pType = tokens.PTokenType.NUM_LIT;
+		
+		p := self.position;
+		self.numDec();
 
-        tok.len = self.position - p;
-    };
-    func operator(self: *Lexer, tok: *tokens.Token) bool {
-        switch char := self.peek(); char {
-        case '*':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.MULEQ;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ARITH_OP;
-                tok.sType = tokens.STokenType.MUL;
-                break;
-            }
-            break;
-        case '/':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.DIVEQ;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ARITH_OP;
-                tok.sType = tokens.STokenType.DIV;
-                break;
-            }
-            break;
-        case '%':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.MODEQ;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ARITH_OP;
-                tok.sType = tokens.STokenType.MOD;
-                break;
-            }
-            break;
-        case '+':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.ADDEQ;
-                break;
-            case '+':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.ADDADD;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ARITH_OP;
-                tok.sType = tokens.STokenType.ADD;
-                break;
-            }
-            break;
-        case '-':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.SUBEQ;
-                break;
-            case '-':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.SUBSUB;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ARITH_OP;
-                tok.sType = tokens.STokenType.SUB;
-                break;
-            }
-            break;
-        case '=':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.EQEQ;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.ASSIGN_OP;
-                tok.sType = tokens.STokenType.EQ;
-                break;
-            }
-            break;
-        case '!':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.NOTEQ;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.LOGIC_OP;
-                tok.sType = tokens.STokenType.LNOT;
-                break;
-            }
-            break;
-        case '>':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.GTEQ;
-                break;
-            case '>':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.BITW_OP;
-                tok.sType = tokens.STokenType.RSHIFT;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.GT;
-                break;
-            }
-            break;
-        case '<':
-            self.eat();
-            switch next := self.peek(); next {
-            case '=':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.LTEQ;
-                break;
-            case '<':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.BITW_OP;
-                tok.sType = tokens.STokenType.LSHIFT;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.RELAT_OP;
-                tok.sType = tokens.STokenType.LT;
-                break;
-            }
-            break;
-        case '&':
-            self.eat();
-            switch next := self.peek(); next {
-            case '&':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.LOGIC_OP;
-                tok.sType = tokens.STokenType.ANDAND;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.BITW_OP;
-                tok.sType = tokens.STokenType.AND;
-                break;
-            }
-            break;
-        case '|':
-            self.eat();
-            switch next := self.peek(); next {
-            case '|':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.LOGIC_OP;
-                tok.sType = tokens.STokenType.OROR;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.BITW_OP;
-                tok.sType = tokens.STokenType.OR;
-                break;
-            }
-            break;
-        case '.':
-            self.eat();
-            switch next := self.peek(); next {
-            case '.':
-                self.eat();
-                tok.len = 2;
-                tok.pType = tokens.PTokenType.SPEC_OP;
-                tok.sType = tokens.STokenType.DOTDOT;
-                break;
-            default:
-                tok.len = 1;
-                tok.pType = tokens.PTokenType.SPEC_OP;
-                tok.sType = tokens.STokenType.DOT;
-                break;
-            }
-            break;
-        case '^':
-            self.eat();
-            tok.len = 1;
-            tok.pType = tokens.PTokenType.BITW_OP;
-            tok.sType = tokens.STokenType.XOR;
-            break;
-        case '~':
-            self.eat();
-            tok.len = 1;
-            tok.pType = tokens.PTokenType.BITW_OP;
-            tok.sType = tokens.STokenType.BNOT;
-            break;
-        case ',':
-            self.eat();
-            tok.len = 1;
-            tok.pType = tokens.PTokenType.SPEC_OP;
-            tok.sType = tokens.STokenType.COMMA;
-            break;
-        case ':':
-            self.eat();
-            tok.len = 1;
-            tok.pType = tokens.PTokenType.SPEC_OP;
-            tok.sType = tokens.STokenType.COLON;
-            break;
-        case '?':
-            self.eat();
-            tok.len = 1;
-            tok.pType = tokens.PTokenType.SPEC_OP;
-            tok.sType = tokens.STokenType.QMARK;
-            break;
-        default:
-            return false;
-        }
-        return true;
-    };
-    func delimiter(self: *Lexer, tok: *tokens.Token) bool {
-        switch char := self.peek(); char {
-        case ';':
-            tok.pType = tokens.PTokenType.SEMICOLON;
-            break;
-        case '(':
-            tok.pType = tokens.PTokenType.LPAREN;
-            break;
-        case ')':
-            tok.pType = tokens.PTokenType.RPAREN;
-            break;
-        case '{':
-            tok.pType = tokens.PTokenType.LCBRACE;
-            break;
-        case '}':
-            tok.pType = tokens.PTokenType.RCBRACE;
-            break;
-        case '[':
-            tok.pType = tokens.PTokenType.LBRACE;
-            break;
-        case ']':
-            tok.pType = tokens.PTokenType.RBRACE;
-            break;
-        default:
-            return false;
-        }
-        tok.len = 1;
-        tok.sType = tokens.STokenType.NULL;
+		tok.len = self.position - p;
+	};
+	func operator(self: *Lexer, tok: *tokens.Token) bool {
+		switch char := self.peek(); char {
+		case '*':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.MULEQ;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ARITH_OP;
+				tok.sType = tokens.STokenType.MUL;
+				break;
+			}
+			break;
+		case '/':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.DIVEQ;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ARITH_OP;
+				tok.sType = tokens.STokenType.DIV;
+				break;
+			}
+			break;
+		case '%':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.MODEQ;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ARITH_OP;
+				tok.sType = tokens.STokenType.MOD;
+				break;
+			}
+			break;
+		case '+':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.ADDEQ;
+				break;
+			case '+':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.ADDADD;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ARITH_OP;
+				tok.sType = tokens.STokenType.ADD;
+				break;
+			}
+			break;
+		case '-':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.SUBEQ;
+				break;
+			case '-':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.SUBSUB;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ARITH_OP;
+				tok.sType = tokens.STokenType.SUB;
+				break;
+			}
+			break;
+		case '=':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.EQEQ;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.ASSIGN_OP;
+				tok.sType = tokens.STokenType.EQ;
+				break;
+			}
+			break;
+		case '!':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.NOTEQ;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.LOGIC_OP;
+				tok.sType = tokens.STokenType.LNOT;
+				break;
+			}
+			break;
+		case '>':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.GTEQ;
+				break;
+			case '>':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.BITW_OP;
+				tok.sType = tokens.STokenType.RSHIFT;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.GT;
+				break;
+			}
+			break;
+		case '<':
+			self.eat();
+			switch next := self.peek(); next {
+			case '=':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.LTEQ;
+				break;
+			case '<':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.BITW_OP;
+				tok.sType = tokens.STokenType.LSHIFT;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.RELAT_OP;
+				tok.sType = tokens.STokenType.LT;
+				break;
+			}
+			break;
+		case '&':
+			self.eat();
+			switch next := self.peek(); next {
+			case '&':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.LOGIC_OP;
+				tok.sType = tokens.STokenType.ANDAND;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.BITW_OP;
+				tok.sType = tokens.STokenType.AND;
+				break;
+			}
+			break;
+		case '|':
+			self.eat();
+			switch next := self.peek(); next {
+			case '|':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.LOGIC_OP;
+				tok.sType = tokens.STokenType.OROR;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.BITW_OP;
+				tok.sType = tokens.STokenType.OR;
+				break;
+			}
+			break;
+		case '.':
+			self.eat();
+			switch next := self.peek(); next {
+			case '.':
+				self.eat();
+				tok.len = 2;
+				tok.pType = tokens.PTokenType.SPEC_OP;
+				tok.sType = tokens.STokenType.DOTDOT;
+				break;
+			default:
+				tok.len = 1;
+				tok.pType = tokens.PTokenType.SPEC_OP;
+				tok.sType = tokens.STokenType.DOT;
+				break;
+			}
+			break;
+		case '^':
+			self.eat();
+			tok.len = 1;
+			tok.pType = tokens.PTokenType.BITW_OP;
+			tok.sType = tokens.STokenType.XOR;
+			break;
+		case '~':
+			self.eat();
+			tok.len = 1;
+			tok.pType = tokens.PTokenType.BITW_OP;
+			tok.sType = tokens.STokenType.BNOT;
+			break;
+		case ',':
+			self.eat();
+			tok.len = 1;
+			tok.pType = tokens.PTokenType.SPEC_OP;
+			tok.sType = tokens.STokenType.COMMA;
+			break;
+		case ':':
+			self.eat();
+			tok.len = 1;
+			tok.pType = tokens.PTokenType.SPEC_OP;
+			tok.sType = tokens.STokenType.COLON;
+			break;
+		case '?':
+			self.eat();
+			tok.len = 1;
+			tok.pType = tokens.PTokenType.SPEC_OP;
+			tok.sType = tokens.STokenType.QMARK;
+			break;
+		default:
+			return false;
+		}
+		return true;
+	};
+	func delimiter(self: *Lexer, tok: *tokens.Token) bool {
+		switch char := self.peek(); char {
+		case ';':
+			tok.pType = tokens.PTokenType.SEMICOLON;
+			break;
+		case '(':
+			tok.pType = tokens.PTokenType.LPAREN;
+			break;
+		case ')':
+			tok.pType = tokens.PTokenType.RPAREN;
+			break;
+		case '{':
+			tok.pType = tokens.PTokenType.LCBRACE;
+			break;
+		case '}':
+			tok.pType = tokens.PTokenType.RCBRACE;
+			break;
+		case '[':
+			tok.pType = tokens.PTokenType.LBRACE;
+			break;
+		case ']':
+			tok.pType = tokens.PTokenType.RBRACE;
+			break;
+		default:
+			return false;
+		}
+		tok.len = 1;
+		tok.sType = tokens.STokenType.NULL;
 
-        self.eat();
-        return true;
-    };
+		self.eat();
+		return true;
+	};
 };

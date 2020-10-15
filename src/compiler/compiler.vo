@@ -6,679 +6,754 @@ import "io.vo";
 import "mem.vo";
 
 struct TypeContext {
-    bottom: size_t = 0;
-    buf: vec i8;
+	bottom: size_t = 0;
+	buf: vec i8;
 
-    func insert(self: *TypeContext, buf: *i8, len: size_t){
-        newBuf := (vec i8){};
+	func insert(self: *TypeContext, buf: *i8, len: size_t){
+		newBuf := (vec i8){};
 
-        for i := 0; i < self.bottom; ++i {
-            newBuf.push(self.buf[i]);
-        }
-        for i := 0; i < len; ++i {
-            newBuf.push(buf[i]);
-        }
-        for i := self.bottom; i < self.buf.length; ++i {
-            newBuf.push(self.buf[i]);
-        }
-        
-        self.buf.free();
-        self.buf = newBuf;
-        self.bottom += len;
-    };
-    func append(self: *TypeContext, buf: *i8, len: size_t){
-        self.buf.append(buf, len);
-    };
-    func push(self: *TypeContext, char: i8){
-        self.buf.push(char);
-    };
-    func num(self: *TypeContext, lit: *ast.BasicLit){
-        if lit.tok.buff[1] == 'o' {
-            self.push('0');
-            self.append(lit.tok.buff + 2, lit.tok.len-2);
-        } else {
-            self.append(lit.tok.buff, lit.tok.len);
-        }
-    }
+		for i := 0; i < self.bottom; ++i {
+			newBuf.push(self.buf[i]);
+		}
+		for i := 0; i < len; ++i {
+			newBuf.push(buf[i]);
+		}
+		for i := self.bottom; i < self.buf.length; ++i {
+			newBuf.push(self.buf[i]);
+		}
+		
+		self.buf.free();
+		self.buf = newBuf;
+		self.bottom += len;
+	};
+	func append(self: *TypeContext, buf: *i8, len: size_t){
+		self.buf.append(buf, len);
+	};
+	func push(self: *TypeContext, char: i8){
+		self.buf.push(char);
+	};
+	func num(self: *TypeContext, lit: *ast.BasicLit){
+		if lit.tok.buff[1] == 'o' {
+			self.push('0');
+			self.append(lit.tok.buff + 2, lit.tok.len-2);
+		} else {
+			self.append(lit.tok.buff, lit.tok.len);
+		}
+	}
 };
 
 export struct Compiler {
-    scopeCount: u32 = 0;
-    context: [50]u8;
-    buff: vec i8;
+	scopeCount: u32;
+	context: [50]u8;
+	buff: vec i8;
 
-    func push(self: *Compiler, char: u8) {
-        self.buff.push(char);
-    };
-    func append(self: *Compiler, str: *i8, len: size_t) {
-        self.buff.append(cast(*u8)str, len);
-    };
+	func push(self: *Compiler, char: u8) {
+		self.buff.push(char);
+	};
+	func append(self: *Compiler, str: *i8, len: size_t) {
+		self.buff.append(cast(*u8)str, len);
+	};
 
-    func openParen(self: *Compiler) {
-        self.push('(');
-    };
-    func closeParen(self: *Compiler) {
-        self.push(')');
-    };
+	func openParen(self: *Compiler) {
+		self.push('(');
+	};
+	func closeParen(self: *Compiler) {
+		self.push(')');
+	};
 
-    func openBrace(self: *Compiler) {
-        self.push('[');
-    };
-    func closeBrace(self: *Compiler) {
-        self.push(']');
-    };
+	func openBrace(self: *Compiler) {
+		self.push('[');
+	};
+	func closeBrace(self: *Compiler) {
+		self.push(']');
+	};
 
-    func openCBrace(self: *Compiler) {
-        self.push('{');
-    };
-    func closeCBrace(self: *Compiler) {
-        self.push('}');
-    };
+	func openCBrace(self: *Compiler) {
+		self.push('{');
+	};
+	func closeCBrace(self: *Compiler) {
+		self.push('}');
+	};
 
-    func dot(self: *Compiler) {
-        self.push('.');
-    };
-    func colon(self: *Compiler) {
-        self.push(':');
-    };
-    func comma(self: *Compiler) {
-        self.push(',');
-    };
-    func semicolon(self: *Compiler) {
-        self.push(';');
-    };
-    func equal(self: *Compiler) {
-        self.push('=');
-    };
+	func dot(self: *Compiler) {
+		self.push('.');
+	};
+	func colon(self: *Compiler) {
+		self.push(':');
+	};
+	func comma(self: *Compiler) {
+		self.push(',');
+	};
+	func semicolon(self: *Compiler) {
+		self.push(';');
+	};
+	func equal(self: *Compiler) {
+		self.push('=');
+	};
 
-    func newline(self: *Compiler) {
-        self.push('\n');
-    };
-    func space(self: *Compiler) {
-        self.push(' ');
-    };
-    func tab(self: *Compiler) {
-        self.push('\t');
-    };
+	func newline(self: *Compiler) {
+		self.push('\n');
+	};
+	func space(self: *Compiler) {
+		self.push(' ');
+	};
+	func tab(self: *Compiler) {
+		self.push('\t');
+	};
 
-    func pushScope(self: *Compiler) {
-        ++self.scopeCount;
-    };
-    func popScope(self: *Compiler) {
-        --self.scopeCount;
-    };
+	func pushScope(self: *Compiler) {
+		++self.scopeCount;
+	};
+	func popScope(self: *Compiler) {
+		--self.scopeCount;
+	};
 
-    func indent(self: *Compiler) {
-        for i := 0; i < self.scopeCount; ++i {
-            self.tab();
-        }
-    };
-    
-    func ident(self: *Compiler, ident: *ast.IdentExpr) {
-        self.append(cast(*i8)ident.tok.buff, ident.tok.len);
-    };
-    func operator(self: *Compiler, op: *ast.Operator) {
-        self.append(cast(*i8)op.tok.buff, op.tok.len);
-    };
-    func basicLit(self: *Compiler, lit: *ast.Expr) {
-        /*
-        switch lit.data.pType {
-        case tokens.PTokenType.NUM_LIT:
-            self.numberLit(lit.buff, lit.len);
-            break;
-        case tokens.PTokenType.CHR_LIT:
-            self.charLit(lit.buff, lit.len);
-            break;
-        case tokens.PTokenType.STR_LIT:
-            self.strLit(lit.buff, lit.len);
-            break;
-        default:
-            break;
-        }
-        */
-        self.append(cast(*i8)lit.buff, lit.len);
-    };
+	func indent(self: *Compiler) {
+		for i := 0; i < self.scopeCount; ++i {
+			self.tab();
+		}
+	};
+	
+	func ident(self: *Compiler, ident: *ast.IdentExpr) {
+		self.append(cast(*i8)ident.tok.buff, ident.tok.len);
+	};
+	func operator(self: *Compiler, op: *ast.Operator) {
+		self.append(cast(*i8)op.tok.buff, op.tok.len);
+	};
+	func basicLit(self: *Compiler, lit: *ast.Expr) {
+		/*
+		switch lit.data.pType {
+		case tokens.PTokenType.NUM_LIT:
+			self.numberLit(lit.buff, lit.len);
+			break;
+		case tokens.PTokenType.CHR_LIT:
+			self.charLit(lit.buff, lit.len);
+			break;
+		case tokens.PTokenType.STR_LIT:
+			self.strLit(lit.buff, lit.len);
+			break;
+		default:
+			break;
+		}
+		*/
+		self.append(cast(*i8)lit.buff, lit.len);
+	};
 
-    func stmt(self: *Compiler, stmt: *ast.Stmt){
-        self.newline();
-        self.indent();
-        self.stmtRaw(stmt);
-        self.semicolon();
-    };
-    func stmtRaw(self: *Compiler, stmt: *ast.Stmt){
-        switch stmt.type {
-        case ast.StmtType.DEC:
-            self.dec(stmt.data.dec);
-            break;
-        case ast.StmtType.EXPR:
-            self.exprStmt(stmt.data.expr);
-            break;
-        case ast.StmtType.RETURN:
-            self.rturn(stmt.data.rturn);
-            break;
-        case ast.StmtType.IF_ELSE:
-            self.ifElse(stmt.data.ifElse);
-            break;
-        case ast.StmtType.SWITCH:
-            self.swtch(stmt.data.swtch);
-            break;
-        case ast.StmtType.LOOP:
-            self.loop(stmt.data.loop);
-            break;
-        case ast.StmtType.FUNC:
-            self.funcDec(stmt.data.funcDec);
-            break;
-        case ast.StmtType.BLOCK:
-            self.block(stmt.data.block);
-            break;
-        case ast.StmtType.LABEL:
-            self.labl(stmt.data.labl);
-            break;
-        case ast.StmtType.GOTO:
-            self.gotoh(stmt.data.gotoh);
-            break;
-        case ast.StmtType.BREAK:
-            self.brak();
-            break;
-        case ast.StmtType.CONTINUE:
-            self.continuee();
-            break;
-        case ast.StmtType.CASE:
-            self.casee(stmt.data.casee);
-            break;
-        case ast.StmtType.DELETE:
-            self.del(stmt.data.del);
-            break;
-        case ast.StmtType.DEFAULT:
-            self.defalt();
-            break;
-        case ast.StmtType.TYPEDEF:
-            self.tdef(stmt.data.tdef);
-            break;
-        default:
-            break;
-        }
-    };
-    func defalt(self: *Compiler) {
-        self.append("default:", 8);
-    };
-    func brak(self: *Compiler) {
-        self.append("break", 5);
-    };
-    func continuee(self: *Compiler) {
-        self.append("continue", 8);
-    };
-    func casee(self: *Compiler, casee: ast.Case){
-        self.append("case ", 5);
-        self.expr(casee.val);
-        self.colon();
-    };
-    func del(self: *Compiler, del: ast.Delete){
-        self.append("free(", 5);
-        self.expr(del.exprs[0]);
-        self.closeParen();
-        
-        for i := 1; i < del.exprs.length; ++i {
-            self.semicolon();
-            self.newline();
-            self.indent();
-        
-            self.append("free(", 5);
-            self.expr(del.exprs[i]);
-            self.closeParen();
-        }
-    };
-    func exprStmt(self: *Compiler, stmt: ast.ExprStmt) {
-        self.expr(stmt.expr);
-    };
-    func dec(self: *Compiler, dec: ast.Declaration) {
-        i := 0;
+	func stmt(self: *Compiler, stmt: *ast.Stmt){
+		self.newline();
+		self.indent();
+		self.stmtRaw(stmt);
+		self.semicolon();
+	};
+	func stmtRaw(self: *Compiler, stmt: *ast.Stmt){
+		switch stmt.type {
+		case ast.StmtType.DEC:
+			self.dec(stmt.data.dec);
+			break;
+		case ast.StmtType.EXPR:
+			self.exprStmt(stmt.data.expr);
+			break;
+		case ast.StmtType.RETURN:
+			self.rturn(stmt.data.rturn);
+			break;
+		case ast.StmtType.IF_ELSE:
+			self.ifElse(stmt.data.ifElse);
+			break;
+		case ast.StmtType.SWITCH:
+			self.swtch(stmt.data.swtch);
+			break;
+		case ast.StmtType.LOOP:
+			self.loop(stmt.data.loop);
+			break;
+		case ast.StmtType.FUNC:
+			self.funcDec(stmt.data.funcDec);
+			break;
+		case ast.StmtType.BLOCK:
+			self.block(stmt.data.block);
+			break;
+		case ast.StmtType.LABEL:
+			self.labl(stmt.data.labl);
+			break;
+		case ast.StmtType.GOTO:
+			self.gotoh(stmt.data.gotoh);
+			break;
+		case ast.StmtType.BREAK:
+			self.brak();
+			break;
+		case ast.StmtType.CONTINUE:
+			self.continuee();
+			break;
+		case ast.StmtType.CASE:
+			self.casee(stmt.data.casee);
+			break;
+		case ast.StmtType.DELETE:
+			self.del(stmt.data.del);
+			break;
+		case ast.StmtType.DEFAULT:
+			self.defalt();
+			break;
+		case ast.StmtType.TYPEDEF:
+			self.tdef(stmt.data.tdef);
+			break;
+		default:
+			break;
+		}
+	};
+	func defalt(self: *Compiler) {
+		self.append("default:", 8);
+	};
+	func brak(self: *Compiler) {
+		self.append("break", 5);
+	};
+	func continuee(self: *Compiler) {
+		self.append("continue", 8);
+	};
+	func casee(self: *Compiler, casee: ast.Case){
+		self.append("case ", 5);
+		self.expr(casee.val);
+		self.colon();
+	};
+	func del(self: *Compiler, del: ast.Delete){
+		self.append("free(", 5);
+		self.expr(del.exprs[0]);
+		self.closeParen();
+		
+		for i := 1; i < del.exprs.length; ++i {
+			self.semicolon();
+			self.newline();
+			self.indent();
+		
+			self.append("free(", 5);
+			self.expr(del.exprs[i]);
+			self.closeParen();
+		}
+	};
+	func exprStmt(self: *Compiler, stmt: ast.ExprStmt) {
+		self.expr(stmt.expr);
+	};
+	func dec(self: *Compiler, dec: ast.Declaration) {
+		i := 0;
 
-        if dec.values == null || dec.values.length == 0 {
-            self.decNoVal(dec);
-            return;
-        }
+		if dec.values == null || dec.values.length == 0 {
+			self.decNoVal(dec);
+			return;
+		}
 
-        goto body;
-        for ; i < dec.idents.length; ++i {
-            self.semicolon();
-            self.newline();
-            self.indent();
+		goto body;
+		for ; i < dec.idents.length; ++i {
+			self.semicolon();
+			self.newline();
+			self.indent();
 
-        label body:
-            self.decType(dec.types[i], dec.idents[i]);
-            self.space();
-            self.equal();
-            self.space();
-            self.expr(dec.values[i]);
-        }
-    };
-    func decNoVal(self: *Compiler, dec: ast.Declaration) {
-        self.decType(dec.types[0], dec.idents[0]);
+		label body:
+			self.decType(dec.types[i], dec.idents[i]);
+			self.space();
+			self.equal();
+			self.space();
+			self.expr(dec.values[i]);
+		}
+	};
+	func decNoVal(self: *Compiler, dec: ast.Declaration) {
+		self.decType(dec.types[0], dec.idents[0]);
 
-        for i := 1; i < dec.idents.length; ++i {
-            self.semicolon();
-            self.newline();
-            self.indent();
-            self.decType(dec.types[i], dec.idents[i]);
-        }
-    };
-    func funcDec(self: *Compiler, dec: ast.FuncDec){
-        if dec.type.type == ast.FuncTypeEnum.ORD {
-            self.funcDecOrd(dec);
-        } else if dec.type.type == ast.FuncTypeEnum.NATIVE {
-            self.funcDecNative(dec);
-        }
-    };
-    func funcDecOrd(self: *Compiler, dec: ast.FuncDec){
-        self.funcDecType(dec.type, dec.name);
-        self.space();
-        self.equal();
-        self.space();
-        self.push('^');
-        self.block(dec.body);
-    };
-    func funcDecNative(self: *Compiler, dec: ast.FuncDec){
-        self.funcDecType(dec.type, dec.name);
-        self.block(dec.body);
-    };
-    func block(self: *Compiler, block: ast.Block) {
-        self.openCBrace();
-        self.pushScope();
-        for i := 0; i < block.stmts.length; ++i {
-            self.stmt(block.stmts[i]);
-        }
-        self.popScope();
-        self.newline();
-        self.indent();
-        self.closeCBrace();
-    };
-    func rturn(self: *Compiler, rturn: ast.Return) {
-        self.append("return", 6);
-        self.space();
-        self.expr(rturn.val);
-    };
-    func ifElse(self: *Compiler, ifElse: ast.IfElse) {
-        c := 0;
+		for i := 1; i < dec.idents.length; ++i {
+			self.semicolon();
+			self.newline();
+			self.indent();
+			self.decType(dec.types[i], dec.idents[i]);
+		}
+	};
+	func funcDec(self: *Compiler, dec: ast.FuncDec){
+		if dec.type.type == ast.FuncTypeEnum.ORD {
+			self.funcDecOrd(dec);
+		} else if dec.type.type == ast.FuncTypeEnum.NATIVE {
+			self.funcDecNative(dec);
+		}
+	};
+	func funcDecOrd(self: *Compiler, dec: ast.FuncDec){
+		self.funcDecType(dec.type, dec.name);
+		self.space();
+		self.equal();
+		self.space();
+		self.push('^');
+		self.block(dec.body);
+	};
+	func funcDecNative(self: *Compiler, dec: ast.FuncDec){
+		self.funcDecType(dec.type, dec.name);
+		self.block(dec.body);
+	};
+	func block(self: *Compiler, block: ast.Block) {
+		self.openCBrace();
+		self.pushScope();
+		for i := 0; i < block.stmts.length; ++i {
+			self.stmt(block.stmts[i]);
+		}
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+	};
+	func rturn(self: *Compiler, rturn: ast.Return) {
+		self.append("return", 6);
+		self.space();
+		self.expr(rturn.val);
+	};
+	func ifElse(self: *Compiler, ifElse: ast.IfElse) {
+		c := 0;
 
-        for i := 0; i < ifElse.blocks.length; ++i {
-            init := ifElse.initStmts[i];
-            cond := ifElse.conds[i];
-            block := ifElse.blocks[i];
+		for i := 0; i < ifElse.blocks.length; ++i {
+			init := ifElse.initStmts[i];
+			cond := ifElse.conds[i];
+			block := ifElse.blocks[i];
 
-            if init != null {
-                self.openCBrace();
-                self.pushScope();
-                self.stmt(init);
-                self.newline();
-                self.indent();
-                ++c;
-            }
-            
-            self.append("if(", 3);
-            self.expr(cond);
-            self.closeParen();
-            
-            self.block(block);
-            self.space();
-            self.append("else ", 5);
-        }
-        
-        if ifElse.elseBlock.stmts != null {
-            self.block(ifElse.elseBlock);
-        }
-        self.semicolon();
+			if init != null {
+				self.openCBrace();
+				self.pushScope();
+				self.stmt(init);
+				self.newline();
+				self.indent();
+				++c;
+			}
+			
+			self.append("if(", 3);
+			self.expr(cond);
+			self.closeParen();
+			
+			self.block(block);
+			self.space();
+			self.append("else ", 5);
+		}
+		
+		if ifElse.elseBlock.stmts != null {
+			self.block(ifElse.elseBlock);
+		}
+		self.semicolon();
 
-        for c-- != 0 {
-            self.popScope();
-            self.newline();
-            self.indent();
-            self.closeCBrace();
-        }
-    };
-    func swtch(self: *Compiler, swtch: ast.Switch) {
-        c: bool = swtch.initStmt != null;
+		for c-- != 0 {
+			self.popScope();
+			self.newline();
+			self.indent();
+			self.closeCBrace();
+		}
+	};
+	func swtch(self: *Compiler, swtch: ast.Switch) {
+		c: bool = swtch.initStmt != null;
 
-        if c {
-            self.openCBrace();
-            self.pushScope();
-            self.stmt(swtch.initStmt);
-            self.newline();
-            self.indent();
-        }
+		if c {
+			self.openCBrace();
+			self.pushScope();
+			self.stmt(swtch.initStmt);
+			self.newline();
+			self.indent();
+		}
 
-        self.append("switch(", 7);
-        self.expr(swtch.expr);
-        self.closeParen();
-        
-        self.block(swtch.block);
+		self.append("switch(", 7);
+		self.expr(swtch.expr);
+		self.closeParen();
+		
+		self.block(swtch.block);
 
-        if c {
-            self.popScope();
-            self.newline();
-            self.indent();
-            self.closeCBrace();
-        }
-    };
-    func loop(self: *Compiler, loop: ast.Loop) {
-        c: bool = loop.initStmt != null;
+		if c {
+			self.popScope();
+			self.newline();
+			self.indent();
+			self.closeCBrace();
+		}
+	};
+	func loop(self: *Compiler, loop: ast.Loop) {
+		c: bool = loop.initStmt != null;
 
-        if c {
-            self.openCBrace();
-            self.pushScope();
-            self.stmt(loop.initStmt);
-            self.newline();
-            self.indent();
-        }
+		if c {
+			self.openCBrace();
+			self.pushScope();
+			self.stmt(loop.initStmt);
+			self.newline();
+			self.indent();
+		}
 
-        self.append("for(;", 5);
+		self.append("for(;", 5);
 
-        if loop.cond != null {
-            self.expr(loop.cond);
-        }
-        self.semicolon();
+		if loop.cond != null {
+			self.expr(loop.cond);
+		}
+		self.semicolon();
 
-        if loop.loopStmt != null {
-            self.stmtRaw(loop.loopStmt);
-        }
-        self.closeParen();
-        self.block(loop.block);
+		if loop.loopStmt != null {
+			self.stmtRaw(loop.loopStmt);
+		}
+		self.closeParen();
+		self.block(loop.block);
 
-        if c {
-            self.newline();
-            self.popScope();
-            self.indent();
-            self.closeCBrace();
-        }
-    };
-    func labl(self: *Compiler, labl: ast.Label) {
-        self.ident(labl.name);
-        self.colon();
-    };
-    func gotoh(self: *Compiler, gotoh: ast.Goto) {
-        self.append("goto ", 5);
-        self.ident(gotoh.name);
-    };
-    func tdef(self: *Compiler, tdef: ast.Typedef) {
-        self.append("typedef ", 8);
-        self.decTypeIdent(tdef.type, tdef.name);
-    };
-    func expr(self: *Compiler, expr: *ast.Expr){
-        switch expr.type {
-        case ast.ExprType.IDENT:
-            self.append(cast(*i8)expr.buff, expr.len);
-            break;
-        case ast.ExprType.UNARY:
-            self.operator(expr.data.unary.op);
-            self.openParen();
-            self.expr(expr.data.unary.expr);
-            self.closeParen();
-            break;
-        case ast.ExprType.PUNARY:
-            self.openParen();
-            self.expr(expr.data.unary.expr);
-            self.closeParen();
-            self.operator(expr.data.unary.op);
-            break;
-        case ast.ExprType.BINARY:
-            self.openParen();
-            self.expr(expr.data.binary.left);
-            self.closeParen();
-            self.space();
-            self.operator(expr.data.binary.op);
-            self.space();
-            self.openParen();
-            self.expr(expr.data.binary.right);
-            self.closeParen();
-            break;
-        case ast.ExprType.TERNARY:
-            self.openParen();
-            self.expr(expr.data.ternary.cond);
-            self.closeParen();
-            self.push('?');
-            self.space();
-            self.openParen();
-            self.expr(expr.data.ternary.left);
-            self.closeParen();
-            self.colon();
-            self.openParen();
-            self.expr(expr.data.ternary.right);
-            self.closeParen();
-            break;
-        case ast.ExprType.CALL:
-            self.openParen();
-            self.expr(expr.data.callExpr.function);
-            self.closeParen();
-            self.openParen();
-            self.exprVec(expr.data.callExpr.args);
-            self.closeParen();
-            break;
-        case ast.ExprType.CAST:
-            self.openParen();
-            self.type(expr.data.castExpr.type);
-            self.closeParen();
-            self.openParen();
-            self.expr(expr.data.castExpr.expr);
-            self.closeParen();
-            break;
-        case ast.ExprType.MEMBER:
-            self.openParen();
-            self.expr(expr.data.member.base);
-            self.closeParen();
-            self.dot();
-            self.ident(expr.data.member.prop);
-            break;
-        case ast.ExprType.ELEMENT:
-            self.openParen();
-            self.expr(expr.data.element.base);
-            self.closeParen();
-            self.openBrace();
-            self.expr(expr.data.element.index);
-            self.closeBrace();
-            break;
-        case ast.ExprType.SIZEOF:
-            self.append("sizeof(", 7);
-            self.expr(expr.data.sizeExpr.expr);
-            self.closeParen();
-            break;
-        case ast.ExprType.NEW:
-            self.newExpr(expr.data.newExpr);
-            break;
-        case ast.ExprType.NUM_LIT:
-            self.numLit(expr);
-            break;
-        default:
-            self.basicLit(expr);
-            break;
-        }
-    };
-    func newExpr(self: *Compiler, newExpr: ast.NewExpr){
-        if newExpr.val != null {
-            self.append("I_NEW(", 6);
-            self.type(newExpr.type);
-            self.comma();
-            self.openParen();
-            self.expr(newExpr.val);
-            self.closeParen();
-            self.closeParen();
-        } else {
-            self.append("I_NEW_NV(", 9);
-            self.openParen();
-            self.type(newExpr.type);
-            self.closeParen();
-            self.closeParen();
-        }
-    };
-    func numLit(self: *Compiler, lit: *ast.Expr){
-        if lit.buff[1] == 'o' {
-            self.push(lit.buff[0]);
-            self.append(cast(*i8)lit.buff + 2, lit.len-2);
-        } else {
-            self.append(cast(*i8)lit.buff, lit.len);
-        }
-    };
-    func exprVec(self: *Compiler, e: *void){
-        exprs: vec *ast.Expr = e;
+		if c {
+			self.newline();
+			self.popScope();
+			self.indent();
+			self.closeCBrace();
+		}
+	};
+	func labl(self: *Compiler, labl: ast.Label) {
+		self.ident(labl.name);
+		self.colon();
+	};
+	func gotoh(self: *Compiler, gotoh: ast.Goto) {
+		self.append("goto ", 5);
+		self.ident(gotoh.name);
+	};
+	func tdef(self: *Compiler, tdef: ast.Typedef) {
+		self.append("typedef ", 8);
+		self.decTypeIdent(tdef.type, tdef.name);
+	};
+	func expr(self: *Compiler, expr: *ast.Expr){
+		switch expr.type {
+		case ast.ExprType.IDENT:
+			self.append(cast(*i8)expr.buff, expr.len);
+			break;
+		case ast.ExprType.UNARY:
+			self.operator(expr.data.unary.op);
+			self.openParen();
+			self.expr(expr.data.unary.expr);
+			self.closeParen();
+			break;
+		case ast.ExprType.PUNARY:
+			self.openParen();
+			self.expr(expr.data.unary.expr);
+			self.closeParen();
+			self.operator(expr.data.unary.op);
+			break;
+		case ast.ExprType.BINARY:
+			self.openParen();
+			self.expr(expr.data.binary.left);
+			self.closeParen();
+			self.space();
+			self.operator(expr.data.binary.op);
+			self.space();
+			self.openParen();
+			self.expr(expr.data.binary.right);
+			self.closeParen();
+			break;
+		case ast.ExprType.TERNARY:
+			self.openParen();
+			self.expr(expr.data.ternary.cond);
+			self.closeParen();
+			self.push('?');
+			self.space();
+			self.openParen();
+			self.expr(expr.data.ternary.left);
+			self.closeParen();
+			self.colon();
+			self.openParen();
+			self.expr(expr.data.ternary.right);
+			self.closeParen();
+			break;
+		case ast.ExprType.CALL:
+			self.openParen();
+			self.expr(expr.data.callExpr.function);
+			self.closeParen();
+			self.openParen();
+			self.exprVec(expr.data.callExpr.args);
+			self.closeParen();
+			break;
+		case ast.ExprType.CAST:
+			self.openParen();
+			self.type(expr.data.castExpr.type);
+			self.closeParen();
+			self.openParen();
+			self.expr(expr.data.castExpr.expr);
+			self.closeParen();
+			break;
+		case ast.ExprType.MEMBER:
+			self.openParen();
+			self.expr(expr.data.member.base);
+			self.closeParen();
+			self.dot();
+			self.ident(expr.data.member.prop);
+			break;
+		case ast.ExprType.ELEMENT:
+			self.openParen();
+			self.expr(expr.data.element.base);
+			self.closeParen();
+			self.openBrace();
+			self.expr(expr.data.element.index);
+			self.closeBrace();
+			break;
+		case ast.ExprType.SIZEOF:
+			self.append("sizeof(", 7);
+			self.expr(expr.data.sizeExpr.expr);
+			self.closeParen();
+			break;
+		case ast.ExprType.NEW:
+			self.newExpr(expr.data.newExpr);
+			break;
+		case ast.ExprType.NUM_LIT:
+			self.numLit(expr);
+			break;
+		default:
+			self.basicLit(expr);
+			break;
+		}
+	};
+	func newExpr(self: *Compiler, newExpr: ast.NewExpr){
+		if newExpr.val != null {
+			self.append("I_NEW(", 6);
+			self.type(newExpr.type);
+			self.comma();
+			self.openParen();
+			self.expr(newExpr.val);
+			self.closeParen();
+			self.closeParen();
+		} else {
+			self.append("I_NEW_NV(", 9);
+			self.openParen();
+			self.type(newExpr.type);
+			self.closeParen();
+			self.closeParen();
+		}
+	};
+	func numLit(self: *Compiler, lit: *ast.Expr){
+		if lit.buff[1] == 'o' {
+			self.push(lit.buff[0]);
+			self.append(cast(*i8)lit.buff + 2, lit.len-2);
+		} else {
+			self.append(cast(*i8)lit.buff, lit.len);
+		}
+	};
+	func exprVec(self: *Compiler, e: *void){
+		exprs: vec *ast.Expr = e;
 
-        if exprs == null || exprs.length == 0 {
-            return;
-        }
-        self.expr(exprs[0]);
+		if exprs == null || exprs.length == 0 {
+			return;
+		}
+		self.expr(exprs[0]);
 
-        for i := 1; i < exprs.length; i++ {
-            self.comma();
-            self.space();
-            self.expr(exprs[i]);
-        }
-    };
-    func type(self: *Compiler, type: *ast.Type){
-        ctx := (TypeContext){buf: (vec u8){}};
-        
-        self.typeRaw(type, &ctx);
-        self.append(ctx.buf.raw, ctx.buf.length);
+		for i := 1; i < exprs.length; i++ {
+			self.comma();
+			self.space();
+			self.expr(exprs[i]);
+		}
+	};
+	func type(self: *Compiler, type: *ast.Type){
+		ctx := (TypeContext){buf: (vec u8){}};
+		
+		self.typeRaw(type, &ctx);
+		self.append(ctx.buf.raw, ctx.buf.length);
 
-        ctx.buf.free();
-    };
-    func decType(self: *Compiler, type: *ast.Type, expr: *ast.Expr){
-        ctx := (TypeContext){buf: (vec i8){}};
-        self.typeRaw(type, &ctx);
-        
-        self.append(ctx.buf.raw, ctx.bottom);
-        self.expr(expr);
-        self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
-        
-        ctx.buf.free();
-    };
-    func decTypeIdent(self: *Compiler, type: *ast.Type, ident: *ast.IdentExpr){
-        ctx := (TypeContext){buf: (vec i8){}};
-        self.typeRaw(type, &ctx);
-        
-        self.append(ctx.buf.raw, ctx.bottom);
-        self.ident(ident);
-        self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
+		ctx.buf.free();
+	};
+	func decType(self: *Compiler, type: *ast.Type, expr: *ast.Expr){
+		ctx := (TypeContext){buf: (vec i8){}};
+		self.typeRaw(type, &ctx);
+		
+		self.append(ctx.buf.raw, ctx.bottom);
+		self.expr(expr);
+		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
+		
+		ctx.buf.free();
+	};
+	func decTypeIdent(self: *Compiler, type: *ast.Type, ident: *ast.IdentExpr){
+		ctx := (TypeContext){buf: (vec i8){}};
+		self.typeRaw(type, &ctx);
+		
+		self.append(ctx.buf.raw, ctx.bottom);
+		self.ident(ident);
+		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
 
-        ctx.buf.free();
-    };
-    func typeRaw(self: *Compiler, type: *ast.Type, ctx: *TypeContext){
-        switch type.type {
-        case ast.TypeType.BASIC:
-            self.expr(type.data.basic.expr);
-            self.space();
-            break;
-        case ast.TypeType.CONST:
-            self.typeRaw(type.data.cnst.base, ctx);
-            break;
-        case ast.TypeType.STATIC:
-            self.append("static ", 7);
-            self.typeRaw(type.data.statc.base, ctx);
-            break;
-        case ast.TypeType.POINTER:
-            ctx.insert("(*", 2);
-            ctx.push(')');
-            self.typeRaw(type.data.pointer.base, ctx);
-            break;
-        case ast.TypeType.ARRAY:
-            ctx.push('[');
-            ctx.num(type.data.array.size);
-            ctx.push(']');
-            self.typeRaw(type.data.array.base, ctx);
-            break;
-        case ast.TypeType.FUNC:
-            self.funcType(type.data.fnc, ctx);
-            break;
-        case ast.TypeType.STRUCT:
-            self.structType(type.data.strct, ctx);
-            self.space();
-            break;
-        default:
-            break;
-        }
-    };
-    func funcDecType(self: *Compiler, fnc: ast.FuncType, ident: *ast.IdentExpr){
-        ctx := (TypeContext){buf: (vec i8){}};
-        self.funcType(fnc, &ctx);
-        self.append(ctx.buf.raw, ctx.bottom);
-        self.ident(ident);
-        self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
-        ctx.buf.free();
-    };
-    func funcType(self: *Compiler, fnc: ast.FuncType, ctx: *TypeContext){
-        if fnc.type == ast.FuncTypeEnum.ORD {
-            ctx.push(')');
+		ctx.buf.free();
+	};
+	func typeRaw(self: *Compiler, type: *ast.Type, ctx: *TypeContext){
+		switch type.type {
+		case ast.TypeType.BASIC:
+			self.expr(type.data.basic.expr);
+			self.space();
+			break;
+		case ast.TypeType.CONST:
+			self.typeRaw(type.data.cnst.base, ctx);
+			break;
+		case ast.TypeType.STATIC:
+			self.append("static ", 7);
+			self.typeRaw(type.data.statc.base, ctx);
+			break;
+		case ast.TypeType.POINTER:
+			ctx.insert("(*", 2);
+			ctx.push(')');
+			self.typeRaw(type.data.pointer.base, ctx);
+			break;
+		case ast.TypeType.ARRAY:
+			ctx.push('[');
+			ctx.num(type.data.array.size);
+			ctx.push(']');
+			self.typeRaw(type.data.array.base, ctx);
+			break;
+		case ast.TypeType.FUNC:
+			self.funcType(type.data.fnc, ctx);
+			break;
+		case ast.TypeType.STRUCT:
+			self.structType(type.data.strct, ctx);
+			self.space();
+			break;
+		case ast.TypeType.UNION:
+			self.unionType(type.data.unon);
+			self.space();
+			break;
+		case ast.TypeType.ENUM:
+			self.enumType(type.data.enm);
+			self.space();
+			break;
+		case ast.TypeType.TUPLE:
+			self.tupleType(type.data.tupl);
+			self.space();
+			break;
+		default:
+			break;
+		}
+	};
+	func funcDecType(self: *Compiler, fnc: ast.FuncType, ident: *ast.IdentExpr){
+		ctx := (TypeContext){buf: (vec i8){}};
+		self.funcType(fnc, &ctx);
+		self.append(ctx.buf.raw, ctx.bottom);
+		self.ident(ident);
+		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
+		ctx.buf.free();
+	};
+	func funcType(self: *Compiler, fnc: ast.FuncType, ctx: *TypeContext){
+		if fnc.type == ast.FuncTypeEnum.ORD {
+			ctx.push(')');
 
-            ctx.push('(');
-            self.funcTypeArgs(fnc.args, ctx);
-            ctx.push(')');
+			ctx.push('(');
+			self.funcTypeArgs(fnc.args, ctx);
+			ctx.push(')');
 
-            if fnc.returnType == null {
-                self.append("void ", 5);
-            } else {
-                self.typeRaw(fnc.returnType, ctx);
-            }
-            ctx.insert("(^", 2);
-        } else if fnc.type == ast.FuncTypeEnum.NATIVE {
-            ctx.push('(');
-            self.funcTypeArgs(fnc.args, ctx);
-            ctx.push(')');
+			if fnc.returnType == null {
+				self.append("void ", 5);
+			} else {
+				self.typeRaw(fnc.returnType, ctx);
+			}
+			ctx.insert("(^", 2);
+		} else if fnc.type == ast.FuncTypeEnum.NATIVE {
+			ctx.push('(');
+			self.funcTypeArgs(fnc.args, ctx);
+			ctx.push(')');
 
-            if fnc.returnType == null {
-                self.append("void ", 5);
-            } else {
-                self.typeRaw(fnc.returnType, ctx);
-            }
-        }
-    };
-    func funcTypeArgs(self: *Compiler, args: ast.Args, ctx: *TypeContext){        
-        if args.types.length == 0 {
-            return;
-        }
-        c := (Compiler){buff: (vec u8){}};
+			if fnc.returnType == null {
+				self.append("void ", 5);
+			} else {
+				self.typeRaw(fnc.returnType, ctx);
+			}
+		}
+	};
+	func funcTypeArgs(self: *Compiler, args: ast.Args, ctx: *TypeContext){		
+		if args.types.length == 0 {
+			return;
+		}
+		c := (Compiler){buff: (vec u8){}, scopeCount: self.scopeCount};
 
-        if args.names == null {
-            goto onlyTypes;    
-        }
-        c.decTypeIdent(args.types[0], &args.names[0]);
-        for i := 1; i < args.types.length; ++i {
-            c.comma();
-            c.space();
-            c.decTypeIdent(args.types[i], &args.names[i]);
-        }
-        goto end;
+		if args.names == null {
+			goto onlyTypes;	
+		}
+		c.decTypeIdent(args.types[0], &args.names[0]);
+		for i := 1; i < args.types.length; ++i {
+			c.comma();
+			c.space();
+			c.decTypeIdent(args.types[i], &args.names[i]);
+		}
+		goto end;
 
-    label onlyTypes:
-        c.type(args.types[0]);
-        for i := 1; i < args.types.length; ++i {
-            c.comma();
-            c.space();
-            c.type(args.types[i]);
-        }
-    label end:
-        ctx.append(c.buff.raw, c.buff.length);
-        c.buff.free();
-    };
-    func structType(self: *Compiler, strct: ast.StructType, ctx: *TypeContext){
-        c := (Compiler){buff: (vec i8){}, scopeCount: self.scopeCount};
+	label onlyTypes:
+		c.type(args.types[0]);
+		for i := 1; i < args.types.length; ++i {
+			c.comma();
+			c.space();
+			c.type(args.types[i]);
+		}
+	label end:
+		ctx.append(c.buff.raw, c.buff.length);
+		c.buff.free();
+	};
+	func structType(self: *Compiler, strct: ast.StructType, ctx: *TypeContext){
+		c := (Compiler){buff: (vec i8){}, scopeCount: self.scopeCount};
 
-        self.append("struct {", 8);
-        self.pushScope();
+		self.append("struct {", 8);
+		self.pushScope();
 
-        for i := 0; i < strct.props.length; ++i {
-            self.newline();
-            self.indent();
-            self.decNoVal(strct.props[i].data.dec);
-            self.semicolon();
-        }
-        self.popScope();
-        self.newline();
-        self.closeCBrace();
+		for i := 0; i < strct.props.length; ++i {
+			self.newline();
+			self.indent();
+			self.decNoVal(strct.props[i].data.dec);
+			self.semicolon();
+		}
+		self.popScope();
+		self.newline();
+		self.closeCBrace();
 
-        for i := 0; i < strct.methods.length; ++i {
-            c.semicolon();
-            c.newline();
-            c.indent();
-            c.funcDec(strct.methods[i].data.funcDec);
-        }
-        ctx.append(c.buff.raw, c.buff.length);
-        c.buff.free();
-    };
+		for i := 0; i < strct.methods.length; ++i {
+			c.semicolon();
+			c.newline();
+			c.indent();
+			c.funcDec(strct.methods[i].data.funcDec);
+		}
+		ctx.append(c.buff.raw, c.buff.length);
+		c.buff.free();
+	};
+	func unionType(self: *Compiler, unon: ast.UnionType){
+		self.append("union {", 7);
+		self.pushScope();
+
+		for i := 0; i < unon.decs.length; ++i {
+			self.newline();
+			self.indent();
+			self.decNoVal(unon.decs[i].data.dec);
+			self.semicolon();
+		}
+		self.popScope();
+		self.newline();
+		self.closeCBrace();
+	};
+	func enumType(self: *Compiler, enm: ast.EnumType){
+		self.append("enum {", 6);
+		self.pushScope();
+
+		for i := 0; i < enm.idents.length; ++i {
+			self.newline();
+			self.indent();
+			self.ident(&enm.idents[i]);
+			
+			val := enm.values[i];
+
+			if val != null {
+				self.space();
+				self.equal();
+				self.space();
+				self.expr(val);
+			}
+			self.comma();
+		}
+		self.popScope();
+		self.newline();
+		self.closeCBrace();
+	};
+	func tupleType(self: *Compiler, tupl: ast.TupleType){
+		self.append("struct {", 8);
+		self.pushScope();
+
+		ctx := (TypeContext){buf: (vec i8){}};
+		for i := 0; i < tupl.types.length; ++i {
+			self.newline();
+			self.indent();
+
+			self.typeRaw(tupl.types[i], &ctx);
+			
+			self.append(ctx.buf.raw, ctx.bottom);
+			self.push('_');
+			self.push(65+i);
+			self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
+			self.semicolon();
+			
+			ctx.buf.length = 0;
+			ctx.bottom = 0;
+		}
+		ctx.buf.free();
+
+		self.popScope();
+		self.newline();
+		self.closeCBrace();
+	};
 };

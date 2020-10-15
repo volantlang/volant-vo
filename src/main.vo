@@ -7,41 +7,41 @@ import "compiler/parser.vo";
 import "compiler/compiler.vo";
 
 func main() i32 {
-    
-    fp: *$FILE = $fopen("./test.vo", "r");
+	
+	fp: *$FILE = $fopen("./test.vo", "r");
 
-    if fp == null {
-        io.println("fp is null");
-        return 1;
-    }
+	if fp == null {
+		io.println("fp is null");
+		return 1;
+	}
 
-    stuff := (vec i8){};
+	stuff := (vec i8){};
 
-    for c: i32 = $fgetc(fp); c != $EOF; c = $fgetc(fp) {
-        stuff.push(cast(i8)c);
-    }
-    stuff.push(0);
-    
-    // io.println(cast(*i8)stuff.raw);
-    
-    p := (parser.Parser){ lexer: (lexer.Lexer){buff: stuff.raw}};
-    c := (compiler.Compiler){scopeCount: 0, buff: (vec i8){}};
+	for c: i32 = $fgetc(fp); c != $EOF; c = $fgetc(fp) {
+		stuff.push(cast(i8)c);
+	}
+	stuff.push(0);
+	
+	// io.println(cast(*i8)stuff.raw);
+	
+	p := (parser.Parser){ lexer: (lexer.Lexer){buff: stuff.raw}};
+	c := (compiler.Compiler){scopeCount: 0, buff: (vec i8){}};
 
-    
-    // fp2: *$FILE = $fopen("./src/compiler/parser2.vo", "w");
-    c.append("#include \"internal/default.h\"\n", 30);
-    p.eat();
-    for tok := p.peek(); tok.pType != tokens.PTokenType.EOF; tok = p.peek() {
-        stmt := p.globalStmt();
-        c.stmt(stmt);
-    }
+	
+	// fp2: *$FILE = $fopen("./src/compiler/parser2.vo", "w");
+	c.append("#include \"internal/default.h\"\n", 30);
+	p.eat();
+	for tok := p.peek(); tok.pType != tokens.PTokenType.EOF; tok = p.peek() {
+		stmt := p.globalStmt();
+		c.stmt(stmt);
+	}
 
-    // c.buff.append("\nint main(){ return test(); }", 29);
-    c.buff.push(0);
-    io.println(c.buff.raw);
+	// c.buff.append("\nint main(){ return test(); }", 29);
+	c.buff.push(0);
+	io.println(c.buff.raw);
 
-    $fclose(fp);
-    // $fclose(fp2);
-    
-    return 0;
+	$fclose(fp);
+	// $fclose(fp2);
+	
+	return 0;
 };
