@@ -1,0 +1,52 @@
+import "tokens.vo";
+
+export func isAlpha(c: u8) bool {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+};
+
+export func isNumDec(c: u8) bool {
+    return (c >= '0' && c <= '9');
+};
+
+export func isNumBi(c: u8) bool {
+    return (c == '0' || c == '1');
+};
+
+export func isNumOct(c: u8) bool {
+    return (c >= '0' && c <= '7');
+};
+
+export func isNumHex(c: u8) bool {
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+};
+
+export func isIdentPart(c: u8) bool {
+    return isAlpha(c) || isNumDec(c) || c == '_';
+};
+
+export func isIdentBegining(c: u8) bool {
+    return isAlpha(c) || c == '_' || c == '$';
+};
+
+export func isStringDelimiter(c: u8) bool {
+    return c == '"';
+};
+
+export func isCharDelimiter(c: u8) bool {
+    return c == '\'';
+};
+
+export func isWhitespace(c: u8) bool {
+    return c == ' ' || c == '\t' || c == '\r';
+};
+
+func strcomp(a: *i8, b: *i8, l: size_t) bool {
+    for *a != 0 && *(a++) == *(b++) && (--l) != 0 {}
+    return *a == 0 && l == 0;
+};
+
+export func findKeyword(c: *i8, l: size_t) size_t {
+    word, i := tokens.Keywords[0], cast(size_t)1;
+    for ;i != tokens.KeywordsNum && !strcomp(word, c, l); word = tokens.Keywords[i++] {}
+    return i;
+};

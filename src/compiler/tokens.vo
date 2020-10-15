@@ -1,0 +1,190 @@
+import "num.vo";
+import "mem.vo";
+import "io.vo";
+
+export enum PTokenType {
+    NULL = 0,
+
+    IDENT,
+    KEYWORD,
+
+    CHAR_LIT,  // char   literal
+    NUM_LIT,   // number literal
+    STR_LIT,   // string literal
+
+    ASSIGN_OP, // assignment operator
+    ARITH_OP,  // arithmetic operator
+    LOGIC_OP,  // logical    operator
+    RELAT_OP,  // relational operator
+    BITW_OP,   // bitwise    operator
+    SPEC_OP,   // special    operator
+
+    LPAREN,    // (
+    RPAREN,    // )
+    LBRACE,    // [
+    RBRACE,    // ]
+    LCBRACE,   // {
+    RCBRACE,   // }
+    SEMICOLON, // ;
+
+    SPACE,
+    EOF,
+};
+
+export enum STokenType {
+    NULL = 0,
+
+    // Keywords (do not change the sequence)
+	FOR,
+	SWITCH,
+    IF,
+	ELSE,
+	FUNC,
+	STRUCT,
+	TUPLE,
+	ENUM,
+	CASE,
+	ASYNC,
+	WORK,
+	IMPORT,
+	RETURN,
+	DEFAULT,
+	BREAK,
+	CONTINUE,
+	NEW,
+	CONST,
+	VEC,
+	DELETE,
+	TYPEDEF,
+	CAST,
+	SIZEOF,
+	EXPORT,
+	UNION,
+	STATIC,
+	CAPTURE,
+	PROMISE,
+    GOTO,
+    LABEL,
+    AWAIT,
+    AS,
+    NATIVE,
+
+    // Arithmetic operators
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    MOD,
+
+    // Assignment operators
+    EQ,
+    ADDEQ,
+    SUBEQ,
+    MULEQ,
+    DIVEQ,
+    MODEQ,
+    ADDADD,
+    SUBSUB,
+
+    // Relational operators
+    EQEQ,
+    NOTEQ,
+    GT,
+    LT,
+    GTEQ,
+    LTEQ,
+
+    // Bitwise operators
+    LSHIFT,
+    RSHIFT,
+    OR,
+    AND,
+    XOR,
+    BNOT,
+
+    // Logical operators
+    ANDAND,
+    OROR,
+    LNOT,
+
+    // Special operators
+    COLON,
+    DOT,
+    DOTDOT,
+    COMMA,
+    QMARK,
+};
+
+export struct Base {
+    buff:   *i8;
+    len:    size_t;
+    line:   size_t;
+    column: size_t;
+};
+
+// do not change the sequence
+export KeywordsNum: u32 = 34;
+export Keywords: [40]*i8 = {
+    "for",   "switch", "if",      "else",    "func",    "struct",  "tuple",  "enum",
+    "case",  "async",  "work",    "import",  "return",  "default", "break",  "continue",
+    "new",   "const",  "vec",     "delete",  "typedef", "case",    "sizeof", "export",
+    "union", "static", "capture", "promise", "goto",    "label",   "await",  "as",
+    "native"
+};
+
+export struct Token {
+    pType: PTokenType;
+    sType: STokenType;
+    ..Base;
+
+    func serialize(self: *Token, str: *i8) {
+        mem.copy(str, "{\n\tpType: ", 10);
+        str += 10;
+
+        buf: [20]u8;
+        n := num.utos(cast(u32)self.pType, buf);
+
+        mem.copy(str, buf, n);
+        str += n;
+
+        mem.copy(str, ",\n\tsType: ", 10);
+        str += 10;
+
+        n = num.utos(cast(u32)self.sType, buf);
+        
+        mem.copy(str, buf, n);
+        str += n;
+
+        mem.copy(str, ",\n\tbuff: ", 9);
+        str += 9;
+
+        mem.copy(str, self.buff, self.len);
+        str += self.len;
+
+        mem.copy(str, ",\n\tline: ", 9);
+        str += 9;
+
+        n = num.utos(cast(u32)self.line, buf);
+
+        mem.copy(str, buf, n);
+        str += n;
+
+        mem.copy(str, ",\n\tcolumn: ", 11);
+        str += 11;
+
+        n = num.utos(cast(u32)self.column, buf);
+
+        mem.copy(str, buf, n);
+        str += n;
+
+
+        *(str++) = '\n';
+        *(str++) = '}';
+        *(str++) = 0;
+    };
+    func print(self: *Token) {
+        buf: [1000]i8;
+        self.serialize(buf);
+        io.println(buf);
+    };
+};

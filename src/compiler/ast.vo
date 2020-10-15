@@ -1,0 +1,394 @@
+import "io.vo";
+import "tokens.vo";
+
+// Expressions
+export enum ExprType {
+    NULL = 0,
+    NEW,
+    FUNC,
+    CALL,
+    CAST,
+    AWAIT,
+    IDENT,
+    UNARY,
+    PUNARY, // postfix unary
+    SIZEOF,
+    MEMBER,
+    ARRLIT,
+    BINARY,
+    TERNARY,
+    COMPLIT,
+    ELEMENT,
+    NUM_LIT,
+    CHR_LIT,
+    STR_LIT,
+};
+
+export struct IdentExpr {
+    tok: tokens.Token;
+};
+export struct BasicLit {
+    tok: tokens.Token;
+};
+export struct Operator {
+    tok: tokens.Token;
+};
+// put this to their right place after fixing sorting
+export enum FuncTypeEnum {
+    ORD = 0,
+    WORK,
+    ASYNC,
+    NATIVE
+};
+
+export struct Args {
+    names: vec IdentExpr;
+    types: vec *Type;
+};
+
+export struct FuncType {
+    args:       Args;
+    type:       FuncTypeEnum;
+    returnType: *Type;
+};
+
+export struct Block {
+    stmts: vec *Stmt;
+};
+// upto here
+
+export struct UnaryExpr {
+    expr: *Expr;
+    op:   *Operator;
+};
+
+export struct BinaryExpr {
+    left:  *Expr;
+    right: *Expr;
+    op:    *Operator;
+};
+
+export struct TernaryExpr {
+    left:  *Expr;
+    cond:  *Expr;
+    right: *Expr;
+};
+
+export struct CallExpr {
+    function: *Expr;
+    args:     vec *Expr;
+};
+
+export struct CastExpr {
+    expr: *Expr;
+    type: *Type;
+};
+
+export struct MemberExpr {
+    base: *Expr;
+    prop: *IdentExpr;
+};
+
+export struct ElementExpr {
+    base:  *Expr;
+    index: *Expr;
+};
+
+export struct CompLit {
+    type:   *Type;
+    values: vec *Expr;
+    fields: vec IdentExpr;
+};
+
+export struct ArrayLit {
+    elements: vec *Expr;
+};
+
+export struct NewExpr {
+    type: *Type;
+    val:  *Expr;
+};
+
+export struct SizeExpr {
+    expr: *Expr;
+};
+
+export struct AwaitExpr {
+    expr: *Expr;
+};
+
+export struct FuncExpr {
+    type:  *FuncType;
+    body:  Block;
+};
+
+export union ExprUnion {
+    unary:   UnaryExpr;
+    binary:  BinaryExpr;
+    ternary: TernaryExpr;
+
+    callExpr: CallExpr;
+    sizeExpr: SizeExpr;
+    castExpr: CastExpr;
+    
+    compLit:   CompLit;
+    arrayLit:  ArrayLit
+    newExpr:   NewExpr;
+    funcExpr:  FuncExpr;
+    awaitExpr: AwaitExpr;
+
+    member:  MemberExpr;
+    element: ElementExpr;
+};
+
+export struct Expr {
+    type: ExprType;
+    data: ExprUnion;
+    eType: *Type;
+    ..tokens.Base;
+
+    func print(self: *Expr){
+        io.printn(cast(*i8)self.buff, self.len);
+    };
+    func println(self: *Expr){
+        io.printnln(cast(*i8)self.buff, self.len);
+    };
+};
+
+// Types
+export enum TypeType {
+    NULL = 0,
+
+    BASIC,
+    FUNC,
+    ENUM,
+    TUPLE,
+    CONST,
+    ARRAY,
+    UNION,
+    STRUCT,
+    VECTOR,
+    STATIC,
+    CAPTURE,
+    PROMISE,
+    POINTER,
+    IMPARRAY,
+};
+
+export struct BasicType {
+    expr: *Expr;
+};
+
+export struct ArrayType {
+    size: *BasicLit;
+    base: *Type; 
+};
+
+export struct ImpArrayType {
+    base: *Type; 
+};
+
+export struct UnionType {
+    decs: vec Declaration; 
+};
+
+export struct EnumType {
+    idents: vec IdentExpr;
+    values: vec *Expr;
+};
+
+export struct TupleType {
+    types: vec *Type;
+};
+
+export struct StructType {
+    props:        vec *Stmt;
+    methods:      vec *Stmt;
+    superStructs: vec *Expr;
+};
+
+export struct StaticType {
+    base: *Type;
+};
+
+export struct ConstType {
+    base: *Type;
+};
+
+export struct PromiseType {
+    base: *Type;
+};
+
+export struct CaptureType {
+    base: *Type;
+};
+
+export struct VectorType {
+    base: *Type;
+};
+
+export struct PointerType {
+    base: *Type;
+};
+
+export union TypeUnion {
+    fnc:      FuncType;
+    enm:      EnumType;
+    tple:     TupleType;
+    cnst:     ConstType;
+    unon:     UnionType;
+    array:    ArrayType;
+    basic:    BasicType;
+    strct:    StructType;
+    statc:    StaticType;
+    promse:   PromiseType;
+    vector:   VectorType;
+    cpture:   CaptureType;
+    pointer:  PointerType;
+    impArray: ImpArrayType;
+};
+
+export struct Type {
+    type: TypeType;
+    data: TypeUnion;
+    ..tokens.Base;
+
+    func print(self: *Type){
+        io.printn(cast(*i8)self.buff, self.len);
+    };
+    func println(self: *Type){
+        io.printnln(cast(*i8)self.buff, self.len);
+    };
+};
+
+// Statements
+export enum StmtType {
+    NULL = 0,
+    DEC,
+    LOOP,
+    EXPR,
+    GOTO,
+    FUNC,
+    CASE,
+    BLOCK,
+    LABEL,
+    BREAK,
+    ASSIGN,
+    EXPORT,
+    IMPORT,
+    SWITCH,
+    RETURN,
+    DELETE,
+    DEFAULT,
+    IF_ELSE,
+    TYPEDEF,
+    CONTINUE
+};
+
+export struct Declaration {
+    idents: vec *Expr;
+    types:  vec *Type;
+    values: vec *Expr;
+};
+
+export struct Import {
+    path: *BasicLit;
+    name: *IdentExpr;
+};
+
+export struct Loop {
+    initStmt: *Stmt;
+    loopStmt: *Stmt;
+    cond:     *Expr;
+    block:    Block;
+};
+
+export struct Switch {
+    expr:     *Expr;
+    block:    Block;
+    initStmt: *Stmt;
+};
+
+export struct IfElse {
+    conds:     vec *Expr;
+    initStmts: vec *Stmt;
+    blocks:    vec Block;
+    elseBlock: Block;
+};
+
+export struct Return {
+    val: *Expr;
+};
+
+export struct Case {
+    val: *Expr;
+}
+
+export struct Assignment {
+    vars: vec *Expr;
+    vals: vec *Expr;
+    op:   *Operator;
+};
+
+export struct Delete {
+    exprs: vec *Expr;
+};
+
+export struct Export {
+    stmt: *Stmt;
+};
+
+export struct Typedef {
+    name: *IdentExpr;
+    type: *Type;
+};
+
+export struct FuncDec {
+    name: *IdentExpr;
+    type: FuncType;
+    body: Block;
+};
+
+export struct Label {
+    name: *IdentExpr;
+};
+
+export struct Goto {
+    name: *IdentExpr;
+};
+
+export struct ExprStmt {
+    expr: *Expr;
+};
+
+export union StmtUnion {
+    del:     Delete;
+    dec:     Declaration;
+    loop:    Loop;
+    tdef:    Typedef;
+    block:   Block;
+    rturn:   Return;
+    imprt:   Import;
+    swtch:   Switch;
+    exprt:   Export;
+    ifElse:  IfElse;
+    assign:  Assignment;
+    funcDec: FuncDec;
+    expr:    ExprStmt;
+    labl:    Label;
+    gotoh:   Goto;
+    casee:   Case;
+};
+
+export struct Stmt {
+    type: StmtType;
+    data: StmtUnion;
+    ..tokens.Base;
+    
+    func print(self: *Type){
+        io.printn(self.buff, self.len);
+    };
+    func println(self: *Type){
+        io.printnln(self.buff, self.len);
+    };
+};
