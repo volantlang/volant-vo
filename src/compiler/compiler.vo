@@ -487,6 +487,9 @@ export struct Compiler {
 		case ast.ExprType.NUM_LIT:
 			self.numLit(expr);
 			break;
+		case ast.ExprType.COMPLIT:
+			self.compLit(expr.data.compLit);
+			break;
 		default:
 			self.basicLit(expr);
 			break;
@@ -508,6 +511,27 @@ export struct Compiler {
 			self.closeParen();
 			self.closeParen();
 		}
+	};
+	func compLit(self: *Compiler, lit: ast.CompLit){
+		self.openParen();
+		self.type(lit.type);
+		self.closeParen();
+
+		self.openCBrace();
+
+		if lit.fields != null {
+			for i := 0; i < lit.fields.length; ++i {
+				self.ident(&lit.fields[i]);
+				self.colon();
+				self.space();
+				self.expr(lit.values[i]);
+				self.comma();
+			}
+		} else if lit.values != null {
+			self.exprVec(lit.values);
+		}
+
+		self.closeCBrace();
 	};
 	func numLit(self: *Compiler, lit: *ast.Expr){
 		if lit.buff[1] == 'o' {

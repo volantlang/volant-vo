@@ -1037,16 +1037,11 @@ export struct Parser {
 	};
 	func expr10(self: *Parser) *ast.Expr { // parenthesis, compound literal, array initializer
 		state := self.state();
-		expr: *ast.Expr; // *ast.Expr or *ast.Type
+		e: *ast.Type;
 
 		switch self.peek().pType {
 		case tokens.PTokenType.LPAREN:
-			self.eat();
-			expr = self.exprOrType();
-			expr.buff--; // hehe amazing hack
-			expr.len += 2;
-			self.expectPri(tokens.PTokenType.RPAREN);
-			self.eatRaw();
+			e = self.type();
 			break;
 		case tokens.PTokenType.LCBRACE:
 			return self.arrayInitializer();
@@ -1056,17 +1051,21 @@ export struct Parser {
 
 		if self.peek().pType != tokens.PTokenType.LCBRACE {
 			self.clean();
-			return cast(*ast.Expr)expr;
+			self.assert(e.type == ast.TypeType.BASIC, "gib expression, not type.");
+			
+			expr := cast(*ast.Expr)e.data.basic.expr;
+			delete e;
+			return expr;
 		}
 
-		c := (ast.CompLit){type: cast(*ast.Type)expr};
+		c := (ast.CompLit){type: e};
 		self.compLitData(&c);
-		
-		e := self.exprNode(&state);
-		e.type = ast.ExprType.COMPLIT;
-		e.data.compLit = c;
 
-		return e;
+		ee := self.exprNode(&state);
+		ee.type = ast.ExprType.COMPLIT;
+		ee.data.compLit = c;
+
+		return ee;
 	};
 	func expr11(self: *Parser) *ast.Expr {
 		state := self.state();
@@ -1220,32 +1219,52 @@ export struct Parser {
 		self.eat();
 		tok := self.peek();
 
-		if tok.pType != tokens.PTokenType.IDENT {	
+		if tok.pType == tokens.PTokenType.RCBRACE {
 			lit.fields = null;
-			lit.values = self.exprVec();
-			return;
-		}
-		self.eat();
-
-		if self.peek().sType != tokens.STokenType.COLON {
-			lit.fields = null;
-			lit.values = self.exprVec();
+			lit.values = null;
+			self.eat();
 			return;
 		}
 
+		e := self.expr();
+
+		if t := self.peek(); e.type != ast.ExprType.IDENT || t.sType != tokens.STokenType.COLON {
+			lit.fields = null;
+			lit.values = (vec *ast.Expr){};
+			lit.values.push(e);
+
+			if t.pType == tokens.PTokenType.RCBRACE {
+				self.eat();
+				return;
+			}
+			
+			exprs := self.exprVec();
+			lit.values.concat(exprs);
+
+			exprs.free();
+			goto end;
+		}
+		delete e;
+		
 		lit.fields = (vec ast.IdentExpr){};
+		lit.values = (vec *ast.Expr){};
+
 		lit.fields.push((ast.IdentExpr){tok});
+		self.expectSec(tokens.STokenType.COLON);
 		self.eat();
 		lit.values.push(self.expr());
-		
+
 		for self.peek().sType == tokens.STokenType.COMMA {
 			self.eat();
+
 			lit.fields.push((ast.IdentExpr){self.expectPri(tokens.PTokenType.IDENT)});
 			self.expectSec(tokens.STokenType.COLON);
 			self.eat();
 			lit.values.push(self.expr());
 		}
-		self.expectPri(tokens.PTokenType.LCBRACE);
+
+	label end:
+		self.expectPri(tokens.PTokenType.RCBRACE);
 		self.eat();
 	};
 	func funcExpr(self: *Parser) *ast.Expr {
@@ -1414,23 +1433,23 @@ export struct Parser {
 		switch tok.sType {
 		case tokens.STokenType.FUNC:
 			return self.funcType();
-		/*
+		case tokens.STokenType.STRUCT:
+			return self.structType();
+		case tokens.STokenType.UNION:
+			return self.unionType();
 		case tokens.STokenType.TUPLE:
 			return self.tupleType();
 		case tokens.STokenType.ENUM:
 			return self.enumType();
-		*/
 		}
 		switch tok.pType {
 		case tokens.PTokenType.LPAREN:
 			self.eat();
 			t := self.type();
-
-			t.buff--; // hehe same ol' awesome hack
-			t.len += 2;
-			
 			self.expectPri(tokens.PTokenType.RPAREN);
 			self.eat();
+			t.buff--; // for parenthesis
+			t.len += 2;
 			return t;
 		case tokens.PTokenType.IDENT:
 			break;
@@ -1439,26 +1458,7 @@ export struct Parser {
 		}
 		
 		state := self.state();
-		self.eat();
-		
-		expr := self.exprNode(&state);
-		expr.type = ast.ExprType.IDENT;
-		expr.buff = tok.buff;
-		expr.len = tok.len;
-
-		/*
-		member: ast.MemberExpr;
-
-		for self.peek().sType == tokens.STokenType.DOT {
-			self.eat();
-			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
-			self.eat();
-			e := self.exprNode(&state);
-			e.type = ast.ExprType.MEMBER;
-			e.data.member = (ast.MemberExpr){base: expr, prop: prop};
-			expr = e;
-		}
-		*/
+		expr := self.expr();
 
 		type := self.typeNode(&state);
 		type.type = ast.TypeType.BASIC;
@@ -1533,11 +1533,6 @@ export struct Parser {
 		}
 		return t;
 	};
-	/*
-	func exprOrType(self: *Parser) *void {
-
-	};
-	*/
 	func structTypedef(self: *Parser) *ast.Stmt {
 		state := self.state();
 		tdef := self.structTypedefRaw();
@@ -1556,6 +1551,18 @@ export struct Parser {
 
 		type := self.structBody();
 		return (ast.Typedef){name: name, type: type};
+	};
+	func structType(self: *Parser) *ast.Type {
+		state := self.state();
+
+		self.eat();
+		strct := self.structBodyRaw();
+		
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.STRUCT;
+		type.data.strct = strct;
+
+		return type;
 	};
 	func structBody(self: *Parser) *ast.Type {
 		state := self.state();
@@ -1610,6 +1617,18 @@ export struct Parser {
 
 		type := self.enumBody();
 		return (ast.Typedef){name: name, type: type};
+	};
+	func enumType(self: *Parser) *ast.Type {
+		state := self.state();
+
+		self.eat();
+		enm := self.enumBodyRaw();
+		
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.ENUM;
+		type.data.enm = enm;
+		
+		return type;
 	};
 	func enumBody(self: *Parser) *ast.Type {
 		state := self.state();
@@ -1667,6 +1686,18 @@ export struct Parser {
 		type := self.unionBody();
 		return (ast.Typedef){name: name, type: type};
 	};
+	func unionType(self: *Parser) *ast.Type {
+		state := self.state();
+
+		self.eat();
+		unon := self.unionBodyRaw();
+		
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.UNION;
+		type.data.unon = unon;
+		
+		return type;
+	};
 	func unionBody(self: *Parser) *ast.Type {
 		state := self.state();
 		unon := self.unionBodyRaw();
@@ -1710,6 +1741,18 @@ export struct Parser {
 		
 		type := self.tupleBody();
 		return (ast.Typedef){name: name, type: type};
+	};
+	func tupleType(self: *Parser) *ast.Type {
+		state := self.state();
+		
+		self.eat();
+		tupl := self.tupleBodyRaw();
+		
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.TUPLE;
+		type.data.tupl = tupl;
+		
+		return type;
 	};
 	func tupleBody(self: *Parser) *ast.Type {
 		state := self.state();
