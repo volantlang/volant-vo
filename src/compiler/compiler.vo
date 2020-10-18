@@ -1,9 +1,12 @@
+
+import "io.vo";
+import "mem.vo";
+
 import "tokens.vo";
 import "lexer.vo";
 import "ast.vo";
 import "parser.vo";
-import "io.vo";
-import "mem.vo";
+import "names.vo";
 
 struct TypeContext {
 	bottom: size_t = 0;
@@ -115,6 +118,10 @@ export struct Compiler {
 	};
 	
 	func ident(self: *Compiler, ident: *ast.IdentExpr) {
+		if p := names.getPrefix(ident.type); p != 0 {
+			self.push(p);
+			self.push('_');
+		}
 		self.append(cast(*i8)ident.tok.buff, ident.tok.len);
 	};
 	func operator(self: *Compiler, op: *ast.Operator) {
@@ -138,7 +145,6 @@ export struct Compiler {
 		*/
 		self.append(cast(*i8)lit.buff, lit.len);
 	};
-
 	func stmt(self: *Compiler, stmt: *ast.Stmt){
 		self.newline();
 		self.indent();
@@ -671,24 +677,20 @@ export struct Compiler {
 		c := (Compiler){buff: (vec u8){}, scopeCount: self.scopeCount};
 
 		if args.names == null {
-			goto onlyTypes;	
+			c.type(args.types[0]);
+			for i := 1; i < args.types.length; ++i {
+				c.comma();
+				c.space();
+				c.type(args.types[i]);
+			}
+		} else {
+			c.decTypeIdent(args.types[0], &args.names[0]);
+			for i := 1; i < args.types.length; ++i {
+				c.comma();
+				c.space();
+				c.decTypeIdent(args.types[i], &args.names[i]);
+			}
 		}
-		c.decTypeIdent(args.types[0], &args.names[0]);
-		for i := 1; i < args.types.length; ++i {
-			c.comma();
-			c.space();
-			c.decTypeIdent(args.types[i], &args.names[i]);
-		}
-		goto end;
-
-	label onlyTypes:
-		c.type(args.types[0]);
-		for i := 1; i < args.types.length; ++i {
-			c.comma();
-			c.space();
-			c.type(args.types[i]);
-		}
-	label end:
 		ctx.append(c.buff.raw, c.buff.length);
 		c.buff.free();
 	};

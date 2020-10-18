@@ -139,7 +139,6 @@ export struct Lexer {
 			self.error("unknown char\n\n");
 			tok.pType = tokens.PTokenType.EOF;
 		}
-		
 		return tok;
 	};
 	func escapeSequence(self: *Lexer) u8 {
@@ -303,14 +302,12 @@ export struct Lexer {
 			self.numHex();
 			goto end;
 		}
+		c := self.peek();
 
-		// self.eat();
-		c: u8;
-
-		for c = self.peek(); c == '0'; c = self.peek() {
+		for c == '0' {
 			self.eat();
+			c = self.peek();
 		}
-
 		if !util.isNumDec(c) {
 			p = self.position - 1;
 			tok.buff = self.buff + p;

@@ -21,4 +21,4 @@ typedef u8 bool;
 #define false 0
 #define null ((void *)0)
 
-#endif /* Vo_INTERNAL_TYPES */
+#endif /* VO_INTERNAL_TYPES */

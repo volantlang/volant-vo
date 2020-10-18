@@ -62,6 +62,14 @@ export struct Parser {
 			len:	cast(size_t)(self.current.buff - state.buff)
 		};
 	};
+	func patternNode(self: *Parser, state: *ParserState) *ast.Pattern {
+		return new ast.Pattern{
+			line:   state.line,
+			column: state.column,
+			buff:   state.buff,
+			len:	cast(size_t)(self.current.buff - state.buff)
+		};
+	};
 	func expectPri(self: *Parser, t: tokens.PTokenType) tokens.Token {
 		tok := self.peek();
 		if tok.pType == t {
@@ -1584,11 +1592,12 @@ export struct Parser {
 		strct.superStructs = (vec *ast.Expr){};
 
 		for tok := self.peek(); tok.pType != tokens.PTokenType.RCBRACE; tok = self.peek() {
-			if tok.sType == tokens.STokenType.DOTDOT {
+			
+			if tok.sType == tokens.STokenType.FUNC {
+				strct.methods.push(self.funcDec());
+			} else if tok.sType == tokens.STokenType.DOTDOT {
 				self.eat();
 				strct.superStructs.push(self.expr());
-			} else if tok.sType == tokens.STokenType.FUNC {
-				strct.methods.push(self.funcDec());
 			} else {
 				strct.props.push(self.dec());
 			}
@@ -1774,5 +1783,129 @@ export struct Parser {
 		self.eat();
 
 		return tupl;
+	};
+	func pattern(self: *Parser) *ast.Pattern {
+		state := self.state();
+		p := self.pattern1();
+
+		for tok := self.peek();
+			tok.sType == tokens.STokenType.ANDAND ||
+			tok.sType == tokens.STokenType.OROR;
+			tok = self.peek() {
+			
+			self.eat();
+			p2 := (ast.BinaryPattern){left: p, right: self.pattern1()};
+
+			p = self.patternNode(&state);
+			p.type = ast.PatternType.BINARY;
+			p.data.binary = p2;
+		}
+		return p;
+	};
+	func pattern1(self: *Parser) *ast.Pattern {
+		state := self.state();
+		tok := self.peek();
+		pattern: *ast.Pattern;
+
+		switch tok.pType {
+		case tokens.PTokenType.LPAREN:
+			return self.range(&state);
+		
+		case tokens.PTokenType.LBRACE:
+			pattern = self.range(&state);
+			pattern.data.range.type += ast.RangeType.LEFT;
+			return pattern;
+
+		case tokens.PTokenType.RELAT_OP:
+			self.eat();
+			p := (ast.UnaryPattern){op: new ast.Operator{tok}, expr: self.expr()};
+			
+			pattern = self.patternNode(&state);
+			pattern.type = ast.PatternType.UNARY;
+			pattern.data.unary = p;
+			return pattern;
+		default:
+			break;
+		}
+		
+		switch tok.sType {
+		case tokens.STokenType.DOTDOT:
+			self.eat();
+			p := (ast.Range){left: null, right: self.expr(), type: ast.RangeType.RIGHT};
+			
+			pattern = self.patternNode(&state);
+			pattern.type = ast.PatternType.RANGE;
+			pattern.data.range = p;
+			return pattern;
+		default:
+			break;
+		}
+
+		e := self.expr();
+
+		if self.peek().sType == tokens.STokenType.DOTDOT {
+			p := (ast.Range){left: e, right: null, type: ast.RangeType.LEFT};
+
+			pattern = self.patternNode(&state);
+			pattern.type = ast.PatternType.RANGE;
+			pattern.data.range = p;
+			return pattern;
+		}
+
+		p := (ast.ExprPattern){expr: e};
+
+		pattern = self.patternNode(&state);
+		pattern.type = ast.PatternType.EXPR;
+		pattern.data.expr = p;
+		return pattern;
+	};
+	func range(self: *Parser, statePtr: *ParserState) *ast.Pattern {
+		self.eat();
+		p := (ast.Range){};
+
+		if self.peek().sType == tokens.STokenType.DOTDOT {
+			self.eat();
+
+			p.left = null;
+			p.right = self.expr();
+			
+			if t := self.peek().pType; t == tokens.PTokenType.RPAREN {
+				p.type = ast.RangeType.NONE;
+			} else if t == tokens.PTokenType.RBRACE {
+				p.type - ast.RangeType.RIGHT;
+			} else {
+				self.error("bruh gib paren or brace");
+			}
+			self.eat();
+			goto end;
+		} 
+		
+		p.left = self.expr();
+
+		self.expectSec(tokens.STokenType.DOTDOT);
+		self.eat();
+
+		if t := self.peek().pType; t == tokens.PTokenType.LPAREN || t == tokens.PTokenType.RBRACE {
+			self.eat();
+			p.type = ast.RangeType.NONE;
+			p.right = null;
+			goto end;
+		}
+		p.right = self.expr();
+
+		if t := self.peek().pType; t == tokens.PTokenType.RPAREN {
+			p.type = ast.RangeType.NONE;
+		} else if t == tokens.PTokenType.RBRACE {
+			p.type = ast.RangeType.RIGHT;
+		} else {
+			self.error("bruh gib paren or brace");
+		}
+		self.eat();
+	
+	label end:
+		pattern := self.patternNode(statePtr);
+		pattern.type = ast.PatternType.RANGE;
+		pattern.data.range = p;
+		return pattern;
 	};
 };

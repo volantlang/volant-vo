@@ -1,0 +1,119 @@
+import "ast.vo";
+import "mem.vo";
+
+struct BufSOA {
+    ptrs: vec *i8;
+    lens: vec size_t;
+};
+func NewBufSOA() BufSOA {
+    return (BufSOA){
+        ptrs: (vec *i8){},
+        lens: (vec size_t){}
+    };
+};
+
+struct NodeSOA {
+    idents: BufSOA;
+    types:  vec *ast.Type;
+};
+func NewNodeSOA() NodeSOA {
+    return (NodeSOA){
+        idents: NewBufSOA(),
+        types: (vec *ast.Type){},
+    };
+};
+
+export struct SymbolTable {
+    variables: NodeSOA;
+    types:     NodeSOA;
+    labels:    BufSOA;
+
+    parent:    *SymbolTable;
+    children:  vec *SymbolTable;
+
+    func addVar(self: *SymbolTable, name: *i8, len: size_t, type: *ast.Type){
+        self.variables.idents.ptrs.push(name);
+        self.variables.idents.lens.push(len);
+        self.variables.types.push(type);
+    };
+    func getVarInCurr(self: *SymbolTable, name: *i8, len: size_t) *ast.Type {
+        idents := self.variables.idents;
+        for i := 0; i < idents.ptrs.length; ++i {
+            if idents.lens[i] == len && mem.compare(idents.ptrs[i], name, len) == 0 {
+                return self.variables.types[i];
+            }
+        }
+        return null;
+    };
+    func getVar(self: *SymbolTable, name: *i8, len: size_t) *ast.Type {
+        if t := self.getVarInCurr(name, len); t != null {
+            return t;
+        } else if self.parent != null {
+            return self.parent.getVar(name, len);
+        }
+        return null;
+    };
+    func addType(self: *SymbolTable, name: *i8, len: size_t, type: *ast.Type){
+        self.types.idents.ptrs.push(name);
+        self.types.idents.lens.push(len);
+        self.types.types.push(type);
+    };
+    func getTypeInCurr(self: *SymbolTable, name: *i8, len: size_t) *ast.Type {
+        idents := self.types.idents;
+        for i, l := 0, idents.ptrs.length; i < l; ++i {
+            if idents.lens[i] == len && mem.compare(idents.ptrs[i], name, len) == 0 {
+                return self.types.types[i];
+            }
+        }
+        return null;
+    };
+    func getType(self: *SymbolTable, name: *i8, len: size_t) *ast.Type {
+        if t := self.getTypeInCurr(name, len); t != null {
+            return t;
+        } else if self.parent != null {
+            return self.parent.getType(name, len);
+        }
+        return null;
+    };
+    func addLabel(self: *SymbolTable, name: *i8, len: size_t){
+        self.labels.ptrs.push(name);
+        self.labels.lens.push(len);
+    };
+    func getLabelInCurr(self: *SymbolTable, name: *i8, len: size_t) bool {
+        labels := self.labels;
+        for i, l := 0, labels.ptrs.length; i < l; ++i {
+            if labels.lens[i] == len && mem.compare(labels.ptrs[i], name, len) {
+                return true;
+            }
+        }
+        return false;
+    };
+    func getLabel(self: *SymbolTable, name: *i8, len: size_t) bool {
+        if t := self.getLabelInCurr(name, len); t == true {
+            return t;
+        } else if self.parent != null {
+            return self.parent.getLabel(name, len);
+        }
+        return false;
+    };
+    func newChild(self: *SymbolTable) *SymbolTable {
+        s := new SymbolTable{
+            variables: NewNodeSOA(),
+            types:     NewNodeSOA(),
+            labels:    NewBufSOA(),
+            parent:    self,
+            children:  (vec *SymbolTable){}
+        };
+        self.children.push(s);
+        return s;
+    };
+};
+export func NewSymbolTable(parent: *SymbolTable) *SymbolTable {
+    return new SymbolTable{
+        variables: NewNodeSOA(),
+        types:     NewNodeSOA(),
+        labels:    NewBufSOA(),
+        parent:    parent,
+        children:  (vec *SymbolTable){}
+    };
+};

@@ -1,5 +1,6 @@
 import "io.vo";
 import "tokens.vo";
+import "names.vo";
 
 // Expressions
 export enum ExprType {
@@ -25,7 +26,9 @@ export enum ExprType {
 };
 
 export struct IdentExpr {
-	tok: tokens.Token;
+	tok:   tokens.Token;
+	index: u16;
+	type:  names.NameType;
 };
 export struct BasicLit {
 	tok: tokens.Token;
@@ -47,8 +50,8 @@ export struct Args {
 };
 
 export struct FuncType {
-	args:	   Args;
-	type:	   FuncTypeEnum;
+	args:       Args;
+	type:       FuncTypeEnum;
 	returnType: *Type;
 };
 
@@ -65,7 +68,7 @@ export struct UnaryExpr {
 export struct BinaryExpr {
 	left:  *Expr;
 	right: *Expr;
-	op:	*Operator;
+	op:    *Operator;
 };
 
 export struct TernaryExpr {
@@ -76,7 +79,7 @@ export struct TernaryExpr {
 
 export struct CallExpr {
 	function: *Expr;
-	args:	 vec *Expr;
+	args:     vec *Expr;
 };
 
 export struct CastExpr {
@@ -139,20 +142,13 @@ export union ExprUnion {
 
 	member:  MemberExpr;
 	element: ElementExpr;
+	name:    names.NameInfo;
 };
 
 export struct Expr {
 	type: ExprType;
 	data: ExprUnion;
-	eType: *Type;
 	..tokens.Base;
-
-	func print(self: *Expr){
-		io.printn(cast(*i8)self.buff, self.len);
-	};
-	func println(self: *Expr){
-		io.printnln(cast(*i8)self.buff, self.len);
-	};
 };
 
 // Types
@@ -202,8 +198,8 @@ export struct TupleType {
 };
 
 export struct StructType {
-	props:		vec *Stmt;
-	methods:	  vec *Stmt;
+	props:        vec *Stmt;
+	methods:      vec *Stmt;
 	superStructs: vec *Expr;
 };
 
@@ -232,15 +228,15 @@ export struct PointerType {
 };
 
 export union TypeUnion {
-	fnc:	  FuncType;
-	enm:	  EnumType;
-	tupl:	 TupleType;
-	cnst:	 ConstType;
-	unon:	 UnionType;
-	array:	ArrayType;
-	basic:	BasicType;
-	strct:	StructType;
-	statc:	StaticType;
+	fnc:      FuncType;
+	enm:      EnumType;
+	tupl:     TupleType;
+	cnst:     ConstType;
+	unon:     UnionType;
+	array:    ArrayType;
+	basic:    BasicType;
+	strct:    StructType;
+	statc:    StaticType;
 	promse:   PromiseType;
 	vector:   VectorType;
 	cpture:   CaptureType;
@@ -252,13 +248,6 @@ export struct Type {
 	type: TypeType;
 	data: TypeUnion;
 	..tokens.Base;
-
-	func print(self: *Type){
-		io.printn(cast(*i8)self.buff, self.len);
-	};
-	func println(self: *Type){
-		io.printnln(cast(*i8)self.buff, self.len);
-	};
 };
 
 // Statements
@@ -299,20 +288,20 @@ export struct Import {
 export struct Loop {
 	initStmt: *Stmt;
 	loopStmt: *Stmt;
-	cond:	 *Expr;
-	block:	Block;
+	cond:     *Expr;
+	block:    Block;
 };
 
 export struct Switch {
-	expr:	 *Expr;
-	block:	Block;
+	expr:     *Expr;
+	block:    Block;
 	initStmt: *Stmt;
 };
 
 export struct IfElse {
-	conds:	 vec *Expr;
+	conds:     vec *Expr;
 	initStmts: vec *Stmt;
-	blocks:	vec Block;
+	blocks:    vec Block;
 	elseBlock: Block;
 };
 
@@ -362,10 +351,10 @@ export struct ExprStmt {
 };
 
 export union StmtUnion {
-	del:	 Delete;
-	dec:	 Declaration;
-	loop:	Loop;
-	tdef:	Typedef;
+	del:     Delete;
+	dec:     Declaration;
+	loop:    Loop;
+	tdef:    Typedef;
 	block:   Block;
 	rturn:   Return;
 	imprt:   Import;
@@ -374,8 +363,8 @@ export union StmtUnion {
 	ifElse:  IfElse;
 	assign:  Assignment;
 	funcDec: FuncDec;
-	expr:	ExprStmt;
-	labl:	Label;
+	expr:    ExprStmt;
+	labl:    Label;
 	gotoh:   Goto;
 	casee:   Case;
 };
@@ -384,11 +373,53 @@ export struct Stmt {
 	type: StmtType;
 	data: StmtUnion;
 	..tokens.Base;
-	
-	func print(self: *Type){
-		io.printn(self.buff, self.len);
-	};
-	func println(self: *Type){
-		io.printnln(self.buff, self.len);
-	};
+};
+
+// Pattern
+export enum PatternType {
+	EXPR,
+	UNARY,
+	BINARY,
+	RANGE
+};
+
+export struct ExprPattern {
+	expr: *Expr;
+};
+
+export struct UnaryPattern {
+	expr: *Expr;
+	op:   *Operator;
+};
+
+export struct BinaryPattern {
+	left:  *Pattern;
+	right: *Pattern;
+	op:    *Operator;
+};
+
+export enum RangeType {
+	NONE,
+	LEFT,
+	RIGHT,
+	BOTH
+};
+
+export struct Range {
+	type:  RangeType;
+	left:  *Expr;
+	right: *Expr;
+};
+
+export union PatternUnion {
+	range:  Range;
+	binary: BinaryPattern;
+	unary:  UnaryPattern;
+	expr:   ExprPattern;
+};
+
+export struct Pattern {
+	type: PatternType;
+	data: PatternUnion;
+	..tokens.Base;
 };

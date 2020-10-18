@@ -1,0 +1,97 @@
+import "io.vo";
+import "tokens.vo";
+import "names.vo";
+import "ast.vo";
+import "symbols.vo";
+
+export struct Analyzer {
+    context: [10]u8;
+    symbols: *symbols.SymbolTable;
+    namespace: names.NameSpace;
+
+    func error(self: *Analyzer, msg: *i8){
+        io.println(msg);
+        $exit(1);
+    };
+    func addVar(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
+        if self.symbols.getVarInCurr(name, len) == null {
+            self.symbols.addVar(name, len, type);
+        } else {
+            self.error("{name} already defined.");
+        }
+    };
+    func addType(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
+        if self.symbols.getTypeInCurr(name, len) == null && self.symbols.getVar(name, len) == null && self.symbols.getLabel(name, len) == null {
+            self.symbols.addType(name, len, type);
+        } else {
+            self.error("{name} already defined.");
+        }
+    };
+    func addLabel(self: *Analyzer, name: *i8, len: size_t){
+        if self.symbols.getLabel(name, len) == null {
+            self.symbols.addLabel(name, len);
+        } else {
+            self.error("{name} already defined.");
+        }
+    };
+    func getVar(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
+        if v := self.symbols.getVar(name, len); v != null {
+            return v;
+        } else if self.symbols.getType(name, len) != null {
+            self.error("{name} is a type, not a variable.");
+        } else if self.symbols.getLabel(name, len) != false {
+            self.error("{name} is a label, not a variable.");
+        } else {
+            self.error("{name} variable not defined.");
+        }
+        return null;
+    };
+    func getType(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
+        if v := self.symbols.getType(name, len); v != null {
+            return v;
+        } else if self.symbols.getVar(name, len) != null {
+            self.error("{name} is a variable, not a type.");
+        } else if self.symbols.getLabel(name, len) != false {
+            self.error("{name} is a label, not a type.");
+        } else {
+            self.error("{name} type not defined.");
+        }
+        return null;
+    };
+    func getLabel(self: *Analyzer, name: *i8, len: size_t) bool {
+        if v := self.symbols.getLabel(name, len); v != false {
+            return v;
+        } else if self.symbols.getVar(name, len) != null {
+            self.error("{name} is a type, not a label.");
+        } else if self.symbols.getType(name, len) != false {
+            self.error("{name} is a var, not a label.");
+        } else {
+            self.error("{name} label not defined.");
+        }
+        return false;
+    };
+    func globalStmt(self: *Analyzer, stmt: *ast.Stmt){
+        switch stmt.type {
+        case ast.StmtType.FUNC:
+            self.funcDec(stmt);
+            break;
+        }
+    };
+    func localStmt(self: *Analyzer, stmt: *ast.Stmt){
+        
+    };
+    func funcDec(self: *Analyzer, stmt: *ast.Stmt){
+        fnc := *(cast(*ast.FuncDec)(&(stmt.data.funcDec))); // thanks to a compiler bug
+
+        self.addVar(fnc.name.tok.buff, fnc.name.tok.len, new ast.Type{
+            type:   ast.TypeType.FUNC,
+            data:   (ast.TypeUnion){ fnc: fnc.type },
+            buff:   stmt.buff,
+            len:    stmt.len,
+            line:   stmt.line,
+            column: stmt.column
+        });
+        fnc.name.type = names.NameType.VAR;
+        fnc.name.index = self.namespace.index;
+    };
+};

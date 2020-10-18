@@ -120,6 +120,13 @@ export struct Base {
 	len:	size_t;
 	line:   size_t;
 	column: size_t;
+	
+	func print(self: *Base){
+		io.printn(self.buff, self.len);
+	};
+	func println(self: *Base){
+		io.printnln(self.buff, self.len);
+	};
 };
 
 // do not change the sequence
@@ -182,9 +189,11 @@ export struct Token {
 		*(str++) = '}';
 		*(str++) = 0;
 	};
+	/*
 	func print(self: *Token) {
 		buf: [1000]i8;
 		self.serialize(buf);
 		io.println(buf);
 	};
+	*/
 };

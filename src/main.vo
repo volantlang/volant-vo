@@ -2,8 +2,11 @@ import "io.vo";
 
 import "compiler/tokens.vo";
 import "compiler/lexer.vo";
+import "compiler/names.vo";
 import "compiler/ast.vo";
 import "compiler/parser.vo";
+import "compiler/symbols.vo";
+import "compiler/analyzer.vo";
 import "compiler/compiler.vo";
 
 func main() i32 {
@@ -25,14 +28,16 @@ func main() i32 {
 	// io.println(cast(*i8)stuff.raw);
 	
 	p := (parser.Parser){ lexer: (lexer.Lexer){buff: stuff.raw}};
+	a := (analyzer.Analyzer){namespace: (names.NameSpace){index: 0}, symbols: symbols.NewSymbolTable(null)};
 	c := (compiler.Compiler){scopeCount: 0, buff: (vec i8){}};
-
 	
 	// fp2: *$FILE = $fopen("./src/compiler/parser2.vo", "w");
 	c.append("#include \"internal/default.h\"\n", 30);
 	p.eat();
+	
 	for tok := p.peek(); tok.pType != tokens.PTokenType.EOF; tok = p.peek() {
 		stmt := p.globalStmt();
+		a.globalStmt(stmt);
 		c.stmt(stmt);
 	}
 

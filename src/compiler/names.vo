@@ -1,0 +1,33 @@
+
+export enum NameType {
+    RAW = 0,
+    ENUM_PROP,
+    STRUCT_PROP,
+    VAR
+};
+
+export struct NameSpace {
+    index: u16;
+};
+
+export struct NameInfo {
+    type: NameType;
+    index: u16;
+};
+
+export func isNamespaced(type: NameType) bool {
+    return type == NameType.VAR;
+};
+
+export func getPrefix(type: NameType) i8 {
+    switch type {
+    case NameType.ENUM_PROP:
+        return 'e';
+    case NameType.STRUCT_PROP:
+        return 'p';
+    case NameType.VAR:
+        return 'v';
+    default:
+        return 0;
+    }
+};
