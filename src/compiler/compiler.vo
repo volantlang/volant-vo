@@ -1,7 +1,7 @@
 
 import "io.vo";
 import "mem.vo";
-
+import "num.vo";
 import "tokens.vo";
 import "lexer.vo";
 import "ast.vo";
@@ -14,7 +14,6 @@ struct TypeContext {
 
 	func insert(self: *TypeContext, buf: *i8, len: size_t){
 		newBuf := (vec i8){};
-
 		for i := 0; i < self.bottom; ++i {
 			newBuf.push(self.buf[i]);
 		}
@@ -24,7 +23,6 @@ struct TypeContext {
 		for i := self.bottom; i < self.buf.length; ++i {
 			newBuf.push(self.buf[i]);
 		}
-		
 		self.buf.free();
 		self.buf = newBuf;
 		self.bottom += len;
@@ -45,9 +43,24 @@ struct TypeContext {
 	}
 };
 
+struct CompilerContext {
+	num: u32;
+	mcases: vec *ast.Pattern;
+
+	func free(self: *CompilerContext){
+		self.mcases.free();
+	};
+};
+func NewCompilerContext() CompilerContext {
+	return (CompilerContext){
+		num: 0,
+		mcases: (vec *ast.Pattern){}
+	};
+};
+
 export struct Compiler {
 	scopeCount: u32;
-	context: [50]u8;
+	context: CompilerContext;
 	buff: vec i8;
 
 	func push(self: *Compiler, char: u8) {
@@ -56,28 +69,24 @@ export struct Compiler {
 	func append(self: *Compiler, str: *i8, len: size_t) {
 		self.buff.append(cast(*u8)str, len);
 	};
-
 	func openParen(self: *Compiler) {
 		self.push('(');
 	};
 	func closeParen(self: *Compiler) {
 		self.push(')');
 	};
-
 	func openBrace(self: *Compiler) {
 		self.push('[');
 	};
 	func closeBrace(self: *Compiler) {
 		self.push(']');
 	};
-
 	func openCBrace(self: *Compiler) {
 		self.push('{');
 	};
 	func closeCBrace(self: *Compiler) {
 		self.push('}');
 	};
-
 	func dot(self: *Compiler) {
 		self.push('.');
 	};
@@ -93,7 +102,6 @@ export struct Compiler {
 	func equal(self: *Compiler) {
 		self.push('=');
 	};
-
 	func newline(self: *Compiler) {
 		self.push('\n');
 	};
@@ -116,12 +124,13 @@ export struct Compiler {
 			self.tab();
 		}
 	};
-	
 	func ident(self: *Compiler, ident: *ast.IdentExpr) {
+		/*
 		if p := names.getPrefix(ident.type); p != 0 {
 			self.push(p);
 			self.push('_');
 		}
+		*/
 		self.append(cast(*i8)ident.tok.buff, ident.tok.len);
 	};
 	func operator(self: *Compiler, op: *ast.Operator) {
@@ -152,6 +161,7 @@ export struct Compiler {
 		self.semicolon();
 	};
 	func stmtRaw(self: *Compiler, stmt: *ast.Stmt){
+		
 		switch stmt.type {
 		case ast.StmtType.DEC:
 			self.dec(stmt.data.dec);
@@ -167,6 +177,9 @@ export struct Compiler {
 			break;
 		case ast.StmtType.SWITCH:
 			self.swtch(stmt.data.swtch);
+			break;
+		case ast.StmtType.MATCH:
+			self.mtch(stmt.data.mtch);
 			break;
 		case ast.StmtType.LOOP:
 			self.loop(stmt.data.loop);
@@ -189,8 +202,11 @@ export struct Compiler {
 		case ast.StmtType.CONTINUE:
 			self.continuee();
 			break;
-		case ast.StmtType.CASE:
-			self.casee(stmt.data.casee);
+		case ast.StmtType.SCASE:
+			self.switchCase(stmt.data.scase);
+			break;
+		case ast.StmtType.MCASE:
+			self.matchCase(stmt.data.mcase);
 			break;
 		case ast.StmtType.DELETE:
 			self.del(stmt.data.del);
@@ -214,10 +230,17 @@ export struct Compiler {
 	func continuee(self: *Compiler) {
 		self.append("continue", 8);
 	};
-	func casee(self: *Compiler, casee: ast.Case){
+	func switchCase(self: *Compiler, scase: ast.SwitchCase){
 		self.append("case ", 5);
-		self.expr(casee.val);
+		self.expr(scase.val);
 		self.colon();
+	};
+	func matchCase(self: *Compiler, mcase: ast.MatchCase){
+		self.append("case ", 5);
+		s: [10]u8;
+		self.append(s, num.utos(self.context.num++, s));
+		self.colon();
+		self.context.mcases.push(mcase.val);
 	};
 	func del(self: *Compiler, del: ast.Delete){
 		self.append("free(", 5);
@@ -238,12 +261,11 @@ export struct Compiler {
 		self.expr(stmt.expr);
 	};
 	func dec(self: *Compiler, dec: ast.Declaration) {
-		i := 0;
-
 		if dec.values == null || dec.values.length == 0 {
 			self.decNoVal(dec);
 			return;
 		}
+		i := 0;
 
 		goto body;
 		for ; i < dec.idents.length; ++i {
@@ -320,11 +342,9 @@ export struct Compiler {
 				self.indent();
 				++c;
 			}
-			
 			self.append("if(", 3);
 			self.expr(cond);
 			self.closeParen();
-			
 			self.block(block);
 			self.space();
 			self.append("else ", 5);
@@ -343,32 +363,31 @@ export struct Compiler {
 		}
 	};
 	func swtch(self: *Compiler, swtch: ast.Switch) {
-		c: bool = swtch.initStmt != null;
-
-		if c {
+		if swtch.initStmt != null {
 			self.openCBrace();
 			self.pushScope();
 			self.stmt(swtch.initStmt);
 			self.newline();
 			self.indent();
-		}
-
-		self.append("switch(", 7);
-		self.expr(swtch.expr);
-		self.closeParen();
 		
-		self.block(swtch.block);
+			self.append("switch(", 7);
+			self.expr(swtch.expr);
+			self.closeParen();			
+			self.block(swtch.block);
 
-		if c {
 			self.popScope();
 			self.newline();
 			self.indent();
 			self.closeCBrace();
+		} else {
+			self.append("switch(", 7);
+			self.expr(swtch.expr);
+			self.closeParen();
+			self.block(swtch.block);
 		}
 	};
 	func loop(self: *Compiler, loop: ast.Loop) {
 		c: bool = loop.initStmt != null;
-
 		if c {
 			self.openCBrace();
 			self.pushScope();
@@ -376,7 +395,6 @@ export struct Compiler {
 			self.newline();
 			self.indent();
 		}
-
 		self.append("for(;", 5);
 
 		if loop.cond != null {
@@ -396,6 +414,65 @@ export struct Compiler {
 			self.indent();
 			self.closeCBrace();
 		}
+	};
+	func mtch(self: *Compiler, mtch: ast.Match) {
+		self.openCBrace();
+		self.pushScope();
+		self.newline();
+		self.indent();
+
+		if mtch.initStmt != null {
+			self.stmt(mtch.initStmt);
+			self.newline();
+			self.indent();
+		}
+
+		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
+		c.block(mtch.block);
+
+		self.append("int i_s = -1;", 13);
+		self.newline();
+		self.indent();
+		self.append("typeof(", 7);
+		self.expr(mtch.expr);
+		self.append(") i_e = ", 8);
+		self.expr(mtch.expr);
+		self.semicolon();
+
+		self.newline();
+		self.newline();
+		self.indent();
+		
+		patterns := c.context.mcases;
+		temp: [10]i8;
+
+		for pattern, i := patterns[0], cast(u32)0; i < patterns.length; pattern = patterns[++i] {
+			self.append("if(", 3);
+			self.pattern(pattern, "i_e", 3);
+			self.closeParen();
+			self.space();
+			self.append("i_s = ", 6);
+			self.append(temp, num.utos(i, temp));
+			self.semicolon();
+			self.newline();
+			self.indent();
+			self.append("else ", 5);
+		}
+		self.semicolon();
+		self.newline();
+		self.newline();
+		self.indent();
+
+		// self.append("if(")
+		self.append("switch(i_s)", 11);
+		self.append(c.buff.raw, c.buff.length);
+
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+
+		c.free();
 	};
 	func labl(self: *Compiler, labl: ast.Label) {
 		self.ident(labl.name);
@@ -496,6 +573,9 @@ export struct Compiler {
 		case ast.ExprType.COMPLIT:
 			self.compLit(expr.data.compLit);
 			break;
+		case ast.ExprType.IS:
+			self.isExpr(expr.data.isExpr);
+			break;
 		default:
 			self.basicLit(expr);
 			break;
@@ -522,7 +602,6 @@ export struct Compiler {
 		self.openParen();
 		self.type(lit.type);
 		self.closeParen();
-
 		self.openCBrace();
 
 		if lit.fields != null {
@@ -536,8 +615,22 @@ export struct Compiler {
 		} else if lit.values != null {
 			self.exprVec(lit.values);
 		}
-
 		self.closeCBrace();
+	};
+	func isExpr(self: *Compiler, isExpr: ast.IsExpr){
+		self.openParen();
+		self.openCBrace();
+		self.append(" typeof(", 8);
+		self.expr(isExpr.expr);
+		self.append(") i_e = ", 8);
+		self.expr(isExpr.expr);
+		self.semicolon();
+		self.space();
+		self.pattern(isExpr.pattern, "i_e", 3);
+		self.semicolon();
+		self.space();
+		self.closeCBrace();
+		self.closeParen();
 	};
 	func numLit(self: *Compiler, lit: *ast.Expr){
 		if lit.buff[1] == 'o' {
@@ -647,7 +740,6 @@ export struct Compiler {
 	func funcType(self: *Compiler, fnc: ast.FuncType, ctx: *TypeContext){
 		if fnc.type == ast.FuncTypeEnum.ORD {
 			ctx.push(')');
-
 			ctx.push('(');
 			self.funcTypeArgs(fnc.args, ctx);
 			ctx.push(')');
@@ -674,7 +766,7 @@ export struct Compiler {
 		if args.types.length == 0 {
 			return;
 		}
-		c := (Compiler){buff: (vec u8){}, scopeCount: self.scopeCount};
+		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
 
 		if args.names == null {
 			c.type(args.types[0]);
@@ -692,10 +784,10 @@ export struct Compiler {
 			}
 		}
 		ctx.append(c.buff.raw, c.buff.length);
-		c.buff.free();
+		c.free();
 	};
 	func structType(self: *Compiler, strct: ast.StructType, ctx: *TypeContext){
-		c := (Compiler){buff: (vec i8){}, scopeCount: self.scopeCount};
+		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
 
 		self.append("struct {", 8);
 		self.pushScope();
@@ -717,7 +809,7 @@ export struct Compiler {
 			c.funcDec(strct.methods[i].data.funcDec);
 		}
 		ctx.append(c.buff.raw, c.buff.length);
-		c.buff.free();
+		c.free();
 	};
 	func unionType(self: *Compiler, unon: ast.UnionType){
 		self.append("union {", 7);
@@ -781,5 +873,180 @@ export struct Compiler {
 		self.popScope();
 		self.newline();
 		self.closeCBrace();
+	};
+	func pattern(self: *Compiler, pattern: *ast.Pattern, buff: *i8, len: size_t){
+		switch pattern.type {
+		case ast.PatternType.EXPR:
+			self.append(buff, len);
+			self.append(" == (", 5);
+			self.expr(pattern.data.expr.expr);
+			self.closeParen();
+			break;
+		case ast.PatternType.UNARY:
+			self.append(buff, len);
+			self.space();
+			self.operator(pattern.data.unary.op);
+			self.space();
+			self.openParen();
+			self.expr(pattern.data.unary.expr);
+			self.closeParen();
+			break;
+		case ast.PatternType.BINARY:
+			self.openParen();
+			self.pattern(pattern.data.binary.left, buff, len);
+			self.closeParen();
+			self.space();
+			self.operator(pattern.data.binary.op);
+			self.space();
+			self.openParen();
+			self.pattern(pattern.data.binary.right, buff, len);
+			self.closeParen();
+			break;
+		case ast.PatternType.RANGE:
+			self.rangePattern(pattern.data.range, buff, len);
+			break;
+		case ast.PatternType.COMP:
+			self.compPattern(pattern.data.comp, buff, len);
+			break;
+		}
+	};
+	func compPattern(self: *Compiler, comp: ast.CompPattern, buff: *i8, len: size_t){
+		/*
+		index: u32 = 0;
+
+		b: [50]i8;
+
+		// b[0] = '*';
+		mem.copy(cast(*void)b, cast(*void)buff, len);
+		mem.copy(cast(*void)b+len, cast(*void)"[i_i]", 5);
+		
+		self.append("({ typeof(", 10);
+		self.append(buff, len);
+		self.append(") i_t = ", 8);
+		self.append(buff, len);
+		self.append("; typeof(i_t) i_v = i_t", 23);
+		*/
+		self.append("({ typeof(", 10);
+		self.append(buff, len);
+		self.append("[0]) *i_t = ", 12);
+		self.append(buff, len);
+		self.semicolon();
+		self.space();
+
+		self.append("typeof(", 7);
+		self.append(buff, len);
+		self.append("[0]) *i_v = i_t; ", 17);
+		
+
+		// self.append("; size_t i_i = -1; ", 19);
+		p, i := comp.values[0], 0;
+
+		goto body;
+		for ; i < comp.values.length; p = comp.values[++i] {
+			
+			self.append(" && ", 4);
+		
+		label body:
+			switch p.type {
+			case ast.PatternType.ELRANGE:
+				if v := cast(*ast.Pattern)p.data.elRange.val; v == null {
+					self.append("({ i_v += ", 10);
+					self.expr(p.data.elRange.len);
+					self.append("; true; })", 10);
+				} else {
+					self.append("({ typeof(", 10);
+					self.expr(p.data.elRange.len);
+					self.append(") i_l = ", 8);
+					self.expr(p.data.elRange.len);
+					self.semicolon();
+					self.space();
+
+					self.append("bool i_f = true; while(i_l--){ if(", 34);
+					self.pattern(v, "*i_v++", 6);
+					self.append("){ continue; } else { i_f = false; break; }; } i_f; })", 54);
+				}
+				break;
+			default:
+				self.pattern(p, "*i_v++", 6);
+				break;
+			}
+		}
+		self.semicolon();
+		self.closeCBrace();
+		self.closeParen();
+	};
+	func rangePattern(self: *Compiler, range: ast.RangePattern, buff: *i8, len: size_t){
+		if range.left == null {
+			self.append(buff, len);
+			
+			switch range.type {
+			case ast.RangeType.NONE:
+				self.append(" < ", 3);
+				break;
+			default:
+				self.append(" <= ", 4);
+				break;
+			}
+			self.openParen();
+			self.expr(range.right);
+			self.closeParen();
+		} else if range.right == null {
+			self.append(buff, len);
+			
+			switch range.type {
+			case ast.RangeType.NONE:
+				self.append(" > ", 3);
+				break;
+			default:
+				self.append(" >= ", 4);
+				break;
+			}
+			self.openParen();
+			self.expr(range.left);
+			self.closeParen();
+		} else {
+			self.openParen();
+			self.append(buff, len);
+			
+			switch range.type {
+			case ast.RangeType.NONE:
+			case ast.RangeType.RIGHT:
+				self.append(" > ", 3);
+				break;
+			default:
+				self.append(" >= ", 4);
+				break;
+			}
+			self.openParen();
+			self.expr(range.left);
+			self.append(")) && (", 7);
+			self.append(buff, len);
+			
+			switch range.type {
+			case ast.RangeType.NONE:
+			case ast.RangeType.LEFT:
+				self.append(" < ", 3);
+				break;
+			default:
+				self.append(" <= ", 4);
+				break;
+			}
+			self.openParen();
+			self.expr(range.right);
+			self.closeParen();
+			self.closeParen();
+		}
+	};
+
+	func free(self: *Compiler) {
+		self.buff.free();
+		self.context.free();
+	};
+};
+export func NewCompiler(scopeCount: u32) Compiler {
+	return (Compiler){
+		scopeCount: scopeCount,
+		buff: (vec i8){},
+		context: NewCompilerContext()
 	};
 };

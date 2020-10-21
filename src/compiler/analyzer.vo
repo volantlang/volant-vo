@@ -4,94 +4,336 @@ import "names.vo";
 import "ast.vo";
 import "symbols.vo";
 
+BoolType := &(ast.Type){
+	type: ast.TypeType.BASIC,
+	data: (ast.TypeUnion){basic: (ast.BasicType){expr: &(ast.Expr){type: ast.ExprType.IDENT, buff: "bool", len: 4}}}
+};
+SizeType := &(ast.Type){
+	type: ast.TypeType.BASIC,
+	data: (ast.TypeUnion){basic: (ast.BasicType){expr: &(ast.Expr){type: ast.ExprType.IDENT, buff: "size_t", len: 4}}}
+};
+
 export struct Analyzer {
-    context: [10]u8;
-    symbols: *symbols.SymbolTable;
-    namespace: names.NameSpace;
+	context: [10]u8;
+	symbols: *symbols.SymbolTable;
+	namespace: names.NameSpace;
+	heap: vec *void;
 
-    func error(self: *Analyzer, msg: *i8){
-        io.println(msg);
-        $exit(1);
-    };
-    func addVar(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
-        if self.symbols.getVarInCurr(name, len) == null {
-            self.symbols.addVar(name, len, type);
-        } else {
-            self.error("{name} already defined.");
-        }
-    };
-    func addType(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
-        if self.symbols.getTypeInCurr(name, len) == null && self.symbols.getVar(name, len) == null && self.symbols.getLabel(name, len) == null {
-            self.symbols.addType(name, len, type);
-        } else {
-            self.error("{name} already defined.");
-        }
-    };
-    func addLabel(self: *Analyzer, name: *i8, len: size_t){
-        if self.symbols.getLabel(name, len) == null {
-            self.symbols.addLabel(name, len);
-        } else {
-            self.error("{name} already defined.");
-        }
-    };
-    func getVar(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
-        if v := self.symbols.getVar(name, len); v != null {
-            return v;
-        } else if self.symbols.getType(name, len) != null {
-            self.error("{name} is a type, not a variable.");
-        } else if self.symbols.getLabel(name, len) != false {
-            self.error("{name} is a label, not a variable.");
-        } else {
-            self.error("{name} variable not defined.");
-        }
-        return null;
-    };
-    func getType(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
-        if v := self.symbols.getType(name, len); v != null {
-            return v;
-        } else if self.symbols.getVar(name, len) != null {
-            self.error("{name} is a variable, not a type.");
-        } else if self.symbols.getLabel(name, len) != false {
-            self.error("{name} is a label, not a type.");
-        } else {
-            self.error("{name} type not defined.");
-        }
-        return null;
-    };
-    func getLabel(self: *Analyzer, name: *i8, len: size_t) bool {
-        if v := self.symbols.getLabel(name, len); v != false {
-            return v;
-        } else if self.symbols.getVar(name, len) != null {
-            self.error("{name} is a type, not a label.");
-        } else if self.symbols.getType(name, len) != false {
-            self.error("{name} is a var, not a label.");
-        } else {
-            self.error("{name} label not defined.");
-        }
-        return false;
-    };
-    func globalStmt(self: *Analyzer, stmt: *ast.Stmt){
-        switch stmt.type {
-        case ast.StmtType.FUNC:
-            self.funcDec(stmt);
-            break;
-        }
-    };
-    func localStmt(self: *Analyzer, stmt: *ast.Stmt){
-        
-    };
-    func funcDec(self: *Analyzer, stmt: *ast.Stmt){
-        fnc := *(cast(*ast.FuncDec)(&(stmt.data.funcDec))); // thanks to a compiler bug
+	func error(self: *Analyzer, msg: *i8){
+		io.println(msg);
+		$exit(1);
+	};
+	func assert(self: *Analyzer, cond: bool, msg: *i8){
+		if cond {
+			return;
+		} else {
+			self.error(msg);
+		}
+	};
+	func addVar(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
+		if self.symbols.getVarInCurr(name, len) == null {
+			self.symbols.addVar(name, len, type);
+		} else {
+			self.error("{name} already defined.");
+		}
+	};
+	func addType(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
+		if self.symbols.getTypeInCurr(name, len) == null && self.symbols.getVar(name, len) == null && self.symbols.getLabel(name, len) == null {
+			self.symbols.addType(name, len, type);
+		} else {
+			self.error("{name} already defined.");
+		}
+	};
+	func addLabel(self: *Analyzer, name: *i8, len: size_t){
+		if self.symbols.getLabel(name, len) == null {
+			self.symbols.addLabel(name, len);
+		} else {
+			self.error("{name} already defined.");
+		}
+	};
+	func getVar(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
+		if v := self.symbols.getVar(name, len); v != null {
+			return v;
+		} else if self.symbols.getType(name, len) != null {
+			self.error("{name} is a type, not a variable.");
+		} else if self.symbols.getLabel(name, len) != false {
+			self.error("{name} is a label, not a variable.");
+		} else {
+			self.error("{name} variable not defined.");
+		}
+		return null;
+	};
+	func getType(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
+		if v := self.symbols.getType(name, len); v != null {
+			return v;
+		} else if self.symbols.getVar(name, len) != null {
+			self.error("{name} is a variable, not a type.");
+		} else if self.symbols.getLabel(name, len) != false {
+			self.error("{name} is a label, not a type.");
+		} else {
+			self.error("{name} type not defined.");
+		}
+		return null;
+	};
+	func getLabel(self: *Analyzer, name: *i8, len: size_t) bool {
+		if v := self.symbols.getLabel(name, len); v != false {
+			return v;
+		} else if self.symbols.getVar(name, len) != null {
+			self.error("{name} is a type, not a label.");
+		} else if self.symbols.getType(name, len) != false {
+			self.error("{name} is a var, not a label.");
+		} else {
+			self.error("{name} label not defined.");
+		}
+		return false;
+	};
+	func globalStmt(self: *Analyzer, stmt: *ast.Stmt){
+		switch stmt.type {
+		case ast.StmtType.FUNC:
+			self.funcDec(stmt);
+			break;
+		case ast.StmtType.DEC:
+			self.dec(stmt);
+			break;
+		}
+	};
+	func localStmt(self: *Analyzer, stmt: *ast.Stmt){
+		
+	};
+	func dec(self: *Analyzer, stmt: *ast.Stmt){
+		dec := *cast(*ast.Declaration)(&stmt.data.dec); // yeah another bug in compiler
 
-        self.addVar(fnc.name.tok.buff, fnc.name.tok.len, new ast.Type{
-            type:   ast.TypeType.FUNC,
-            data:   (ast.TypeUnion){ fnc: fnc.type },
-            buff:   stmt.buff,
-            len:    stmt.len,
-            line:   stmt.line,
-            column: stmt.column
-        });
-        fnc.name.type = names.NameType.VAR;
-        fnc.name.index = self.namespace.index;
-    };
+		l1 := dec.idents.length;
+		l2 := dec.types.length;
+		l3 := dec.values.length;
+
+		if l2 == 1 {
+			for t := dec.types[0]; dec.types.length != dec.idents.length {
+				dec.types.push(t);
+			}
+		}
+		if l3 == 1 {
+			for v := dec.values[0]; dec.values.length != dec.idents.length {
+				dec.values.push(v);
+			}
+		}
+		if dec.types.length != l1 {
+			self.error("expected {l1} types, got {l2}.");
+		} else if dec.values.length != l1 {
+			self.error("expected {l1} values, got {l3}.");
+		}
+		for i, ident := 0, dec.idents[0]; i < dec.idents.length; ident = dec.idents[++i] {
+			n := cast(*names.NameInfo)(&ident.data.name);
+			n.index = self.namespace.index;
+			n.type = names.NameType.VAR;
+		}
+	};
+	func funcDec(self: *Analyzer, stmt: *ast.Stmt){
+		fnc := *(cast(*ast.FuncDec)(&(stmt.data.funcDec))); // thanks to a compiler bug
+
+		t := new ast.Type{
+			type:   ast.TypeType.FUNC,
+			data:   (ast.TypeUnion){ fnc: fnc.type },
+			buff:   stmt.buff,
+			len:    stmt.len,
+			line:   stmt.line,
+			column: stmt.column
+		};
+		self.heap.push(cast(*void)t);
+
+		self.addVar(fnc.name.tok.buff, fnc.name.tok.len, t);
+		fnc.name.type = names.NameType.VAR;
+		fnc.name.index = self.namespace.index;
+	};
+	func expr(self: *Analyzer, expr: *ast.Expr){
+		switch expr.type {
+		case ast.ExprType.IDENT:
+			expr.eType = self.getVar(expr.buff, expr.len);
+			break;
+		case ast.ExprType.UNARY:
+			self.unaryExpr(expr);
+			break;
+		case ast.ExprType.PUNARY:
+			self.punaryExpr(expr);
+			break;
+		case ast.ExprType.BINARY:
+			self.binaryExpr(expr);
+			break;
+		case ast.ExprType.TERNARY:
+			self.ternaryExpr(expr);
+			break;
+		case ast.ExprType.COMPLIT:
+			self.compLit(expr);
+			break;
+		case ast.ExprType.ELEMENT:
+			self.elementExpr(expr);
+			break;
+		case ast.ExprType.CAST:
+			self.castExpr(expr);
+			break;
+		case ast.ExprType.NEW:
+			self.newExpr(expr);
+			break;
+		case ast.ExprType.SIZEOF:
+			self.sizeExpr(expr);
+			break;
+		case ast.ExprType.AWAIT:
+			self.awaitExpr(expr);
+			break;
+		case ast.ExprType.CALL:
+			self.callExpr(expr);
+			break;
+		}
+	};
+	func unaryExpr(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.Expr)expr.data.unary.expr;
+		self.expr(e);
+			
+		switch op := cast(*ast.Operator)expr.data.unary.op; op.tok.sType {
+		case tokens.STokenType.MUL:
+			expr.eType = e.eType.data.pointer.base;
+			break;
+		case tokens.STokenType.AND:
+			expr.eType = self.pointerTo(e.eType);
+			break;
+		default:
+			expr.eType = e.eType;
+			break;
+		}
+	};
+	func punaryExpr(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.Expr)expr.data.unary.expr;
+		self.expr(e);
+		expr.eType = e.eType;
+	};
+	func binaryExpr(self: *Analyzer, expr: *ast.Expr){
+		b := *cast(*ast.BinaryExpr)(&expr.data.binary);
+
+		self.expr(b.left);
+		self.expr(b.right);
+		self.assert(self.compareTypes(b.left.eType, b.right.eType), "Type mismatch, expected {a.left.eType}, got {b.right.eType}");
+		
+		switch b.op.tok.pType {
+		case tokens.PTokenType.RELAT_OP:
+			expr.eType = BoolType;
+			break;
+		default:
+			expr.eType = b.left.eType;
+			break;
+		}
+	};
+	func ternaryExpr(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.TernaryExpr)(&expr.data.ternary);
+		
+		self.expr(e.cond);
+		self.expr(e.left);
+		self.expr(e.right);
+
+		self.assert(self.compareTypes(e.left.eType, e.right.eType), "Type mismatch: expected {e.left.eType}, got {e.right.eType}.");
+		self.assert(self.compareTypes(e.cond.eType, BoolType) , "Type mismatch: expected bool, got {e.right.eType}.");
+		
+		expr.eType = e.left.eType;
+	};
+	func compLit(self: *Analyzer, expr: *ast.Expr){
+		e := *cast(*ast.CompLit)&expr.data.compLit;
+		vals := e.values;
+		feilds := e.fields;
+
+		self.type(e.type);
+
+		// handle feild repetition here
+		for val, i := vals[0], 0; i < vals.length; val = vals[++i] {
+			self.expr(val);
+		}
+		expr.eType = e.type;
+	};
+	func elementExpr(self: *Analyzer, expr: *ast.Expr){
+		e := (cast(*ast.ElementExpr)(&expr.data.element)).base;
+		self.expr(e);
+		
+		switch t := e.eType; t.type {
+		case ast.TypeType.POINTER:
+			expr.eType = cast(*ast.Type)t.data.pointer.base;
+			break;
+		case ast.TypeType.ARRAY:
+			expr.eType = cast(*ast.Type)t.data.array.base;
+			break;
+		case ast.TypeType.VECTOR:
+			expr.eType = cast(*ast.Type)t.data.vector.base;
+			break;
+		}
+	};
+	func castExpr(self: *Analyzer, expr: *ast.Expr){
+		e := *cast(*ast.CastExpr)&expr.data.castExpr;
+		type := e.type;
+		exp := e.expr;
+
+		self.expr(expr);
+		self.type(type);
+
+		// handle casting rules here
+		expr.eType = type;
+	};
+	func newExpr(self: *Analyzer, expr: *ast.Expr){
+		e := *cast(*ast.NewExpr)&expr.data.newExpr;
+		type, val := e.type, e.val;
+		
+		if type != null {
+			self.type(type);
+		} else if val != null {
+			type, expr.data.newExpr.type = val.eType, val.eType;
+		} else {
+			self.error("bruh you baf");
+		}
+		expr.eType = self.pointerTo(type);
+	};
+	func sizeExpr(self: *Analyzer, expr: *ast.Expr){
+		self.expr(expr.data.sizeExpr.expr);
+		expr.eType = SizeType;
+	};
+	func awaitExpr(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.Expr)expr.data.awaitExpr.expr;
+		self.expr(e);
+		self.assert(e.eType.type == ast.TypeType.PROMISE, "bruh you very baf");
+
+		expr.eType = e.eType.data.promse.base;	
+	};
+	func callExpr(self: *Analyzer, expr: *ast.Expr){
+
+	};
+	func getTypeIdent(self: *Analyzer, ident: *ast.IdentExpr) *ast.Type {
+		return self.getVar(ident.tok.buff, ident.tok.len);
+	};
+	func normalizeType(self: *Analyzer, type: *ast.Type) *ast.Type {
+		switch type.type {
+		case ast.TypeType.CONST:
+			return self.normalizeType(type.data.cnst.base);
+		case ast.TypeType.STATIC:
+			return self.normalizeType(type.data.statc.base);
+		case ast.TypeType.CAPTURE:
+			return self.normalizeType(type.data.cpture.base);
+		default:
+			return type;
+		}
+	};
+
+	func type(self: *Analyzer, type: *ast.Type){
+
+	};
+	func pointerTo(self: *Analyzer, type: *ast.Type) *ast.Type {
+		t := new ast.Type{data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}};
+		self.heap.push(t);
+		return t;
+	};
+	func compareTypes(self: *Analyzer, type1: *ast.Type, type2: *ast.Type) bool {
+		return true;
+	};
+};
+
+export func NewAnalyzer() Analyzer {
+	return (Analyzer){
+		symbols: symbols.NewSymbolTable(null),
+		heap: (vec *void){},
+		namespace: (names.NameSpace){index: 0}
+	};
 };

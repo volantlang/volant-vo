@@ -2,10 +2,8 @@ import "io.vo";
 
 import "compiler/tokens.vo";
 import "compiler/lexer.vo";
-import "compiler/names.vo";
 import "compiler/ast.vo";
 import "compiler/parser.vo";
-import "compiler/symbols.vo";
 import "compiler/analyzer.vo";
 import "compiler/compiler.vo";
 
@@ -24,12 +22,11 @@ func main() i32 {
 		stuff.push(cast(i8)c);
 	}
 	stuff.push(0);
-	
 	// io.println(cast(*i8)stuff.raw);
 	
-	p := (parser.Parser){ lexer: (lexer.Lexer){buff: stuff.raw}};
-	a := (analyzer.Analyzer){namespace: (names.NameSpace){index: 0}, symbols: symbols.NewSymbolTable(null)};
-	c := (compiler.Compiler){scopeCount: 0, buff: (vec i8){}};
+	p := parser.NewParser((lexer.Lexer){buff: stuff.raw});
+	a := analyzer.NewAnalyzer();
+	c := compiler.NewCompiler(0);
 	
 	// fp2: *$FILE = $fopen("./src/compiler/parser2.vo", "w");
 	c.append("#include \"internal/default.h\"\n", 30);

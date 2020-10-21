@@ -5,6 +5,7 @@ import "names.vo";
 // Expressions
 export enum ExprType {
 	NULL = 0,
+	IS,
 	NEW,
 	FUNC,
 	CALL,
@@ -30,12 +31,15 @@ export struct IdentExpr {
 	index: u16;
 	type:  names.NameType;
 };
+
 export struct BasicLit {
 	tok: tokens.Token;
 };
+
 export struct Operator {
 	tok: tokens.Token;
 };
+
 // put this to their right place after fixing sorting
 export enum FuncTypeEnum {
 	ORD = 0,
@@ -69,6 +73,11 @@ export struct BinaryExpr {
 	left:  *Expr;
 	right: *Expr;
 	op:    *Operator;
+};
+
+export struct IsExpr {
+	expr: *Expr;
+	pattern: *Pattern;
 };
 
 export struct TernaryExpr {
@@ -142,12 +151,14 @@ export union ExprUnion {
 
 	member:  MemberExpr;
 	element: ElementExpr;
+	isExpr:  IsExpr;
 	name:    names.NameInfo;
 };
 
 export struct Expr {
-	type: ExprType;
-	data: ExprUnion;
+	type:  ExprType;
+	eType: *Type;
+	data:  ExprUnion;
 	..tokens.Base;
 };
 
@@ -258,9 +269,11 @@ export enum StmtType {
 	EXPR,
 	GOTO,
 	FUNC,
-	CASE,
+	SCASE,
+	MCASE,
 	BLOCK,
 	LABEL,
+	MATCH,
 	BREAK,
 	ASSIGN,
 	EXPORT,
@@ -298,6 +311,12 @@ export struct Switch {
 	initStmt: *Stmt;
 };
 
+export struct Match {
+	expr: *Expr;
+	block: Block;
+	initStmt: *Stmt;
+};
+
 export struct IfElse {
 	conds:     vec *Expr;
 	initStmts: vec *Stmt;
@@ -309,9 +328,13 @@ export struct Return {
 	val: *Expr;
 };
 
-export struct Case {
+export struct SwitchCase {
 	val: *Expr;
-}
+};
+
+export struct MatchCase {
+	val: *Pattern;
+};
 
 export struct Assignment {
 	vars: vec *Expr;
@@ -366,7 +389,9 @@ export union StmtUnion {
 	expr:    ExprStmt;
 	labl:    Label;
 	gotoh:   Goto;
-	casee:   Case;
+	scase:   SwitchCase;
+	mcase:   MatchCase;
+	mtch:    Match;
 };
 
 export struct Stmt {
@@ -377,10 +402,13 @@ export struct Stmt {
 
 // Pattern
 export enum PatternType {
+	NULL = 0,
 	EXPR,
 	UNARY,
 	BINARY,
-	RANGE
+	RANGE,
+	ELRANGE,
+	COMP
 };
 
 export struct ExprPattern {
@@ -405,17 +433,30 @@ export enum RangeType {
 	BOTH
 };
 
-export struct Range {
+export struct RangePattern {
 	type:  RangeType;
 	left:  *Expr;
 	right: *Expr;
 };
 
+export struct ElementRangePattern {
+	len: *Expr;
+	val: *Pattern;
+	dotdot: bool;
+};
+
+export struct CompPattern {
+	fields: vec IdentExpr;
+	values: vec *Pattern;
+};
+
 export union PatternUnion {
-	range:  Range;
-	binary: BinaryPattern;
-	unary:  UnaryPattern;
-	expr:   ExprPattern;
+	range:   RangePattern;
+	binary:  BinaryPattern;
+	unary:   UnaryPattern;
+	expr:    ExprPattern;
+	elRange: ElementRangePattern;
+	comp:    CompPattern;
 };
 
 export struct Pattern {
