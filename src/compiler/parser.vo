@@ -1367,7 +1367,7 @@ export struct Parser {
 		lit.fields = (vec ast.IdentExpr){};
 		lit.values = (vec *ast.Expr){};
 
-		lit.fields.push((ast.IdentExpr){tok});
+		lit.fields.push((ast.IdentExpr){tok: tok});
 		self.expectSec(tokens.STokenType.COLON);
 		self.eat();
 		lit.values.push(self.expr());
@@ -1375,7 +1375,8 @@ export struct Parser {
 		for self.peek().sType == tokens.STokenType.COMMA {
 			self.eat();
 
-			lit.fields.push((ast.IdentExpr){self.expectPri(tokens.PTokenType.IDENT)});
+			lit.fields.push((ast.IdentExpr){tok: self.expectPri(tokens.PTokenType.IDENT)});
+			self.eat();
 			self.expectSec(tokens.STokenType.COLON);
 			self.eat();
 			lit.values.push(self.expr());
@@ -1898,28 +1899,16 @@ export struct Parser {
 		switch tok.pType {
 		case tokens.PTokenType.LPAREN:
 			return self.rangeP(&state);
-		
 		case tokens.PTokenType.LBRACE:
 			return self.rangeB(&state);
-		
+		case tokens.PTokenType.LCBRACE:
+			return self.compPattern(&state);
 		case tokens.PTokenType.RELAT_OP:
 			self.eat();
 			data.unary = (ast.UnaryPattern){op: new ast.Operator{tok}, expr: self.expr2()};
 			
 			pattern = self.patternNode(&state);
 			pattern.type = ast.PatternType.UNARY;
-			pattern.data = data;
-			return pattern;
-
-		case tokens.PTokenType.LCBRACE:
-			self.eat();
-			data.comp = (ast.CompPattern){fields: null, values: self.patternVec()};
-			
-			self.expectPri(tokens.PTokenType.RCBRACE);
-			self.eat();
-
-			pattern = self.patternNode(&state);
-			pattern.type = ast.PatternType.COMP;
 			pattern.data = data;
 			return pattern;
 		default:
@@ -1932,6 +1921,64 @@ export struct Parser {
 		}
 
 		return null;
+	};
+	func compPattern(self: *Parser, statePtr: *ParserState) *ast.Pattern {
+		self.eat();
+		comp := (ast.CompPattern){};
+		
+		tok := self.peek();
+		e := self.pattern();
+
+		if t := self.peek(); e.type != ast.PatternType.EXPR || (cast(*ast.ExprPattern)&e.data.expr).expr.type != ast.ExprType.IDENT || t.sType != tokens.STokenType.COLON {
+			comp.fields = null;
+			comp.values = (vec *ast.Pattern){};
+			comp.values.push(e);
+
+			if t.pType == tokens.PTokenType.RCBRACE {
+				self.eat();
+				goto end;
+			}
+			self.expectSec(tokens.STokenType.COMMA);
+			self.eat();
+
+			ps := self.patternVec();
+			comp.values.concat(ps);
+
+			ps.free();
+			
+			self.expectPri(tokens.PTokenType.RCBRACE);
+			self.eat();
+			goto end;
+		}
+		delete e;
+		
+		comp.fields = (vec ast.IdentExpr){};
+		comp.values = (vec *ast.Pattern){};
+
+		comp.fields.push((ast.IdentExpr){tok: tok});
+		self.expectSec(tokens.STokenType.COLON);
+		self.eat();
+		comp.values.push(self.pattern());
+
+		for self.peek().sType == tokens.STokenType.COMMA {
+			self.eat();
+
+			comp.fields.push((ast.IdentExpr){tok: self.expectPri(tokens.PTokenType.IDENT)});
+			self.eat();
+			self.expectSec(tokens.STokenType.COLON);
+			self.eat();
+			comp.values.push(self.pattern());
+		}
+
+		self.expectPri(tokens.PTokenType.RCBRACE);
+		self.eat();
+	
+	label end:
+		pattern := self.patternNode(statePtr);
+		pattern.type = ast.PatternType.COMP;
+		pattern.data.comp = comp;
+		
+		return pattern;
 	};
 	func rangeP(self: *Parser, statePtr: *ParserState) *ast.Pattern {
 		self.eat();

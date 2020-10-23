@@ -430,10 +430,10 @@ export struct Compiler {
 		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
 		c.block(mtch.block);
 
-		self.append("int i_s = -1;", 13);
+		self.append("register int i_s = -1;", 22);
 		self.newline();
 		self.indent();
-		self.append("typeof(", 7);
+		self.append("register typeof(", 16);
 		self.expr(mtch.expr);
 		self.append(") i_e = ", 8);
 		self.expr(mtch.expr);
@@ -463,7 +463,6 @@ export struct Compiler {
 		self.newline();
 		self.indent();
 
-		// self.append("if(")
 		self.append("switch(i_s)", 11);
 		self.append(c.buff.raw, c.buff.length);
 
@@ -606,11 +605,13 @@ export struct Compiler {
 
 		if lit.fields != null {
 			for i := 0; i < lit.fields.length; ++i {
+				self.push('.');
 				self.ident(&lit.fields[i]);
-				self.colon();
+				self.equal();
 				self.space();
 				self.expr(lit.values[i]);
 				self.comma();
+				self.space();
 			}
 		} else if lit.values != null {
 			self.exprVec(lit.values);
@@ -856,9 +857,8 @@ export struct Compiler {
 		for i := 0; i < tupl.types.length; ++i {
 			self.newline();
 			self.indent();
-
 			self.typeRaw(tupl.types[i], &ctx);
-			
+
 			self.append(ctx.buf.raw, ctx.bottom);
 			self.push('_');
 			self.push(65+i);
@@ -905,75 +905,99 @@ export struct Compiler {
 		case ast.PatternType.RANGE:
 			self.rangePattern(pattern.data.range, buff, len);
 			break;
+		case ast.PatternType.ELRANGE:
+			self.elRangePattern(pattern.data.elRange, buff, len);
+			break;
 		case ast.PatternType.COMP:
 			self.compPattern(pattern.data.comp, buff, len);
 			break;
 		}
 	};
-	func compPattern(self: *Compiler, comp: ast.CompPattern, buff: *i8, len: size_t){
-		/*
-		index: u32 = 0;
+	func compPattern(self: *Compiler, comp: ast.CompPattern, buff: *i8, len: size_t){	
+		if comp.fields == null {
+			self.append("({ register typeof(", 19);
+			self.append(buff, len);
+			self.append("[0]) *i_t = ", 12);
+			self.append(buff, len);
+			self.semicolon();
+			self.space();
 
-		b: [50]i8;
-
-		// b[0] = '*';
-		mem.copy(cast(*void)b, cast(*void)buff, len);
-		mem.copy(cast(*void)b+len, cast(*void)"[i_i]", 5);
-		
-		self.append("({ typeof(", 10);
-		self.append(buff, len);
-		self.append(") i_t = ", 8);
-		self.append(buff, len);
-		self.append("; typeof(i_t) i_v = i_t", 23);
-		*/
-		self.append("({ typeof(", 10);
-		self.append(buff, len);
-		self.append("[0]) *i_t = ", 12);
-		self.append(buff, len);
-		self.semicolon();
-		self.space();
-
-		self.append("typeof(", 7);
-		self.append(buff, len);
-		self.append("[0]) *i_v = i_t; ", 17);
-		
-
-		// self.append("; size_t i_i = -1; ", 19);
-		p, i := comp.values[0], 0;
-
-		goto body;
-		for ; i < comp.values.length; p = comp.values[++i] {
+			self.append("register typeof(", 16);
+			self.append(buff, len);
+			self.append("[0]) *i_v = i_t; ", 17);
 			
-			self.append(" && ", 4);
-		
-		label body:
-			switch p.type {
-			case ast.PatternType.ELRANGE:
-				if v := cast(*ast.Pattern)p.data.elRange.val; v == null {
-					self.append("({ i_v += ", 10);
-					self.expr(p.data.elRange.len);
-					self.append("; true; })", 10);
-				} else {
-					self.append("({ typeof(", 10);
-					self.expr(p.data.elRange.len);
-					self.append(") i_l = ", 8);
-					self.expr(p.data.elRange.len);
-					self.semicolon();
-					self.space();
+			p, i := comp.values[0], 0;
 
-					self.append("bool i_f = true; while(i_l--){ if(", 34);
-					self.pattern(v, "*i_v++", 6);
-					self.append("){ continue; } else { i_f = false; break; }; } i_f; })", 54);
-				}
-				break;
-			default:
-				self.pattern(p, "*i_v++", 6);
-				break;
+			goto body;
+			for ; i < comp.values.length; p = comp.values[++i] {
+				self.append(" && i_v++ && ", 13);
+			label body:
+				self.pattern(p, "*i_v", 4);
+			}
+		} else {
+			self.append("({ register typeof(", 19);
+			self.append(buff, len);
+			self.append(") i_t = ", 8);
+			self.append(buff, len);
+			self.semicolon();
+			self.space();
+			
+			self.append("register typeof(", 16);
+			self.append(buff, len);
+			self.append(") i_v = i_t; ", 13);
+
+			p, q, i := comp.values[0], comp.fields[0], 1;
+			b: [30]i8;
+
+			mem.copy(b, "i_v", 3);
+			b[3] = '.';
+
+			goto body2;
+			for ;i < comp.values.length; ++i {
+				self.append(" && i_v++ && ", 13);
+				
+			label body2:
+				mem.copy(cast(*i8)b+4, q.tok.buff, q.tok.len);
+				self.pattern(p, b, q.tok.len+4);
+
+				p, q = comp.values[i], comp.fields[i];
 			}
 		}
 		self.semicolon();
 		self.closeCBrace();
 		self.closeParen();
+	};
+	func elRangePattern(self: *Compiler, elRange: ast.ElementRangePattern, buff: *i8, len: size_t){
+		if elRange.val == null {
+			self.append("({ i_v += ", 10);
+			self.expr(elRange.len);
+			self.append("; true; })", 10);
+			return;
+		}
+
+		self.append("({ typeof(", 10);
+		self.expr(elRange.len);
+		self.append(") i_l = ", 8);
+		self.expr(elRange.len);
+		self.semicolon();
+		self.space();
+	
+		if elRange.dotdot == false {
+			self.append("(i_l-- && (", 16);
+			self.pattern(elRange.val, buff, len);
+		} else {
+			self.append("typeof(", 7);
+			self.expr(elRange.val.data.expr.expr);
+			self.append("[0]) *i_o = ", 12);
+			self.expr(elRange.val.data.expr.expr);
+			self.semicolon();
+			self.space();
+			
+			self.append("while(i_l-- && (", 16);
+			self.append(buff, len);
+			self.append(" == *i_o++)", 11);
+		}
+		self.append("){ i_v++; } i_l == -1; })", 25);
 	};
 	func rangePattern(self: *Compiler, range: ast.RangePattern, buff: *i8, len: size_t){
 		if range.left == null {
@@ -992,7 +1016,7 @@ export struct Compiler {
 			self.closeParen();
 		} else if range.right == null {
 			self.append(buff, len);
-			
+
 			switch range.type {
 			case ast.RangeType.NONE:
 				self.append(" > ", 3);
@@ -1021,7 +1045,7 @@ export struct Compiler {
 			self.expr(range.left);
 			self.append(")) && (", 7);
 			self.append(buff, len);
-			
+
 			switch range.type {
 			case ast.RangeType.NONE:
 			case ast.RangeType.LEFT:
