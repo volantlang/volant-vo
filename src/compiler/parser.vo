@@ -518,8 +518,8 @@ export struct Parser {
 		if self.peek().sType != tokens.STokenType.EQ {
 			dec.types = self.decTypeVec();
 		} else {
+			dec.types = (vec *ast.Type){};
 			goto eq;
-			dec.types = null;
 		}
 
 		if self.peek().sType == tokens.STokenType.EQ {
