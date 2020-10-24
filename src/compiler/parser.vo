@@ -1088,10 +1088,10 @@ export struct Parser {
 	func expr9(self: *Parser) *ast.Expr { // unuary *, &, +, -, ++, --, !, ~, new, cast, sizeof
 		tok := self.peek();
 
-		if tok.sType == tokens.STokenType.MUL	 || 
-			tok.sType == tokens.STokenType.AND	|| 
-			tok.sType == tokens.STokenType.ADD	|| 
-			tok.sType == tokens.STokenType.SUB	|| 
+		if tok.sType == tokens.STokenType.MUL     || 
+			tok.sType == tokens.STokenType.AND    || 
+			tok.sType == tokens.STokenType.ADD    || 
+			tok.sType == tokens.STokenType.SUB    || 
 			tok.sType == tokens.STokenType.LNOT   || 
 			tok.sType == tokens.STokenType.BNOT   || 
 			tok.sType == tokens.STokenType.ADDADD || 
@@ -1336,9 +1336,9 @@ export struct Parser {
 		tok := self.peek();
 
 		if tok.pType == tokens.PTokenType.RCBRACE {
+			self.eat();
 			lit.fields = null;
 			lit.values = null;
-			self.eat();
 			return;
 		}
 
@@ -1636,7 +1636,7 @@ export struct Parser {
 		if tok := self.peek();
 			tok.sType != tokens.STokenType.COMMA	 &&
 			tok.pType != tokens.PTokenType.SEMICOLON &&
-			tok.pType != tokens.PTokenType.RPAREN	&&
+			tok.pType != tokens.PTokenType.RPAREN	 &&
 			tok.pType != tokens.PTokenType.LCBRACE {
 			t.returnType = self.type();
 		} else {

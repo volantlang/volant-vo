@@ -544,11 +544,7 @@ export struct Compiler {
 			self.closeParen();
 			break;
 		case ast.ExprType.MEMBER:
-			self.openParen();
-			self.expr(expr.data.member.base);
-			self.closeParen();
-			self.dot();
-			self.ident(expr.data.member.prop);
+			self.memberExpr(expr);
 			break;
 		case ast.ExprType.ELEMENT:
 			self.openParen();
@@ -632,6 +628,19 @@ export struct Compiler {
 		self.space();
 		self.closeCBrace();
 		self.closeParen();
+	};
+	func memberExpr(self: *Compiler, expr: *ast.Expr){
+		self.openParen();
+		self.expr(expr.data.member.base);
+		self.closeParen();
+
+		if (cast(*ast.Expr)(expr.data.member.base)).eType.type == ast.TypeType.POINTER {
+			self.push('-');
+			self.push('>');
+		} else {
+			self.dot();
+		}
+		self.ident(expr.data.member.prop);
 	};
 	func numLit(self: *Compiler, lit: *ast.Expr){
 		if lit.buff[1] == 'o' {

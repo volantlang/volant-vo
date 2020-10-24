@@ -102,6 +102,9 @@ export struct Analyzer {
 		case ast.StmtType.DEC:
 			self.dec(stmt);
 			break;
+		case ast.StmtType.EXPR:
+			self.expr(stmt.data.expr.expr);
+			break;
 		default:
 			break;
 		}
@@ -120,7 +123,7 @@ export struct Analyzer {
 		if dec.values == null {
 			goto next;
 		}
-
+		
 		if dec.values.length == 1 {
 			self.expr(dec.values[0]);
 			for dec.values.length != dec.idents.length {
@@ -219,6 +222,9 @@ export struct Analyzer {
 		case ast.ExprType.CALL:
 			self.callExpr(expr);
 			break;
+		case ast.ExprType.MEMBER:
+			self.memberExpr(expr);
+			break;
 		}
 	};
 	func unaryExpr(self: *Analyzer, expr: *ast.Expr){
@@ -278,8 +284,10 @@ export struct Analyzer {
 		self.type(e.type);
 
 		// handle feild repetition here
-		for val, i := vals[0], 0; i < vals.length; val = vals[++i] {
-			self.expr(val);
+		if vals != null {
+			for val, i := vals[0], 0; i < vals.length; val = vals[++i] {
+				self.expr(val);
+			}
 		}
 		expr.eType = e.type;
 	};
@@ -337,6 +345,16 @@ export struct Analyzer {
 	func callExpr(self: *Analyzer, expr: *ast.Expr){
 
 	};
+	func memberExpr(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.Expr)expr.data.member.base;
+		self.expr(e);
+
+		if e.eType.type == ast.TypeType.POINTER {
+			expr.data.member.pointer = true;
+		} else {
+			expr.data.member.pointer = false;
+		}
+	};
 	func getTypeIdent(self: *Analyzer, ident: *ast.IdentExpr) *ast.Type {
 		return self.getVar(ident.tok.buff, ident.tok.len);
 	};
@@ -357,7 +375,7 @@ export struct Analyzer {
 
 	};
 	func pointerTo(self: *Analyzer, type: *ast.Type) *ast.Type {
-		t := new ast.Type{data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}};
+		t := new ast.Type{type: ast.TypeType.POINTER, data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}};
 		self.heap.push(t);
 		return t;
 	};

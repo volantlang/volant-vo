@@ -97,8 +97,9 @@ export struct CastExpr {
 };
 
 export struct MemberExpr {
-	base: *Expr;
-	prop: *IdentExpr;
+	base:    *Expr;
+	prop:    *IdentExpr;
+	pointer: bool;
 };
 
 export struct ElementExpr {
