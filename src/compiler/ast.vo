@@ -4,7 +4,6 @@ import "names.vo";
 
 // Expressions
 export enum ExprType {
-	NULL = 0,
 	IS,
 	NEW,
 	FUNC,
@@ -19,6 +18,7 @@ export enum ExprType {
 	ARRLIT,
 	BINARY,
 	TERNARY,
+	GENCALL,
 	COMPLIT,
 	ELEMENT,
 	NUM_LIT,
@@ -97,9 +97,8 @@ export struct CastExpr {
 };
 
 export struct MemberExpr {
-	base:    *Expr;
-	prop:    *IdentExpr;
-	pointer: bool;
+	base: *Expr;
+	prop: *IdentExpr;
 };
 
 export struct ElementExpr {
@@ -135,6 +134,12 @@ export struct FuncExpr {
 	body:  Block;
 };
 
+export struct GenCall {
+	expr: *Expr;
+	types: vec *Type;
+	index: u32;
+};
+
 export union ExprUnion {
 	unary:   UnaryExpr;
 	binary:  BinaryExpr;
@@ -152,6 +157,7 @@ export union ExprUnion {
 
 	member:  MemberExpr;
 	element: ElementExpr;
+	genCall: GenCall;
 	isExpr:  IsExpr;
 	name:    names.NameInfo;
 };
@@ -165,8 +171,6 @@ export struct Expr {
 
 // Types
 export enum TypeType {
-	NULL = 0,
-
 	BASIC,
 	FUNC,
 	ENUM,
@@ -181,6 +185,7 @@ export enum TypeType {
 	PROMISE,
 	POINTER,
 	IMPARRAY,
+	TEMPLATE
 };
 
 export struct BasicType {
@@ -239,6 +244,24 @@ export struct PointerType {
 	base: *Type;
 };
 
+export enum TypeOrExpr {
+	NULL,
+	TYPE,
+	EXPR
+};
+
+export union TypeExprUnion {
+	type: *Type;
+	expr: *Expr;
+};
+
+export struct TemplateType {
+	type:   TypeOrExpr;
+	data:   TypeExprUnion;
+	params: vec IdentExpr;
+	args:   vec vec *Type;
+};
+
 export union TypeUnion {
 	fnc:      FuncType;
 	enm:      EnumType;
@@ -254,17 +277,19 @@ export union TypeUnion {
 	cpture:   CaptureType;
 	pointer:  PointerType;
 	impArray: ImpArrayType;
+	tmplate:  TemplateType;
 };
 
 export struct Type {
 	type: TypeType;
 	data: TypeUnion;
+	id:   u64;
 	..tokens.Base;
 };
 
 // Statements
 export enum StmtType {
-	NULL = 0,
+	NULL,
 	DEC,
 	LOOP,
 	EXPR,
@@ -285,6 +310,7 @@ export enum StmtType {
 	DEFAULT,
 	IF_ELSE,
 	TYPEDEF,
+	TEMPLATE,
 	CONTINUE
 };
 
@@ -374,25 +400,31 @@ export struct ExprStmt {
 	expr: *Expr;
 };
 
+export struct Template {
+	name: *IdentExpr;
+	type: TemplateType;
+};
+
 export union StmtUnion {
-	del:     Delete;
-	dec:     Declaration;
-	loop:    Loop;
-	tdef:    Typedef;
-	block:   Block;
-	rturn:   Return;
-	imprt:   Import;
-	swtch:   Switch;
-	exprt:   Export;
-	ifElse:  IfElse;
-	assign:  Assignment;
-	funcDec: FuncDec;
-	expr:    ExprStmt;
-	labl:    Label;
-	gotoh:   Goto;
-	scase:   SwitchCase;
-	mcase:   MatchCase;
-	mtch:    Match;
+	del:      Delete;
+	dec:      Declaration;
+	loop:     Loop;
+	tdef:     Typedef;
+	block:    Block;
+	rturn:    Return;
+	imprt:    Import;
+	swtch:    Switch;
+	exprt:    Export;
+	ifElse:   IfElse;
+	assign:   Assignment;
+	funcDec:  FuncDec;
+	expr:     ExprStmt;
+	labl:     Label;
+	gotoh:    Goto;
+	scase:    SwitchCase;
+	mcase:    MatchCase;
+	mtch:     Match;
+	tmplate:  Template;
 };
 
 export struct Stmt {
@@ -403,7 +435,6 @@ export struct Stmt {
 
 // Pattern
 export enum PatternType {
-	NULL = 0,
 	EXPR,
 	UNARY,
 	BINARY,

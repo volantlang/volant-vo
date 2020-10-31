@@ -32,12 +32,16 @@ func main() i32 {
 	c.append("#include \"internal/default.h\"\n", 30);
 	p.eat();
 	
+	stmts := (vec *ast.Stmt){};
+
 	for tok := p.peek(); tok.pType != tokens.PTokenType.EOF; tok = p.peek() {
 		stmt := p.globalStmt();
 		a.globalStmt(stmt);
-		c.stmt(stmt);
+		stmts.push(stmt);
 	}
-
+	for i := 0; i < stmts.length; ++i {
+		c.stmt(stmts[i]);
+	}
 	// c.buff.append("\nint main(){ return test(); }", 29);
 	c.buff.push(0);
 	io.println(c.buff.raw);

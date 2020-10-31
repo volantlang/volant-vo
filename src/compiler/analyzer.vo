@@ -18,6 +18,7 @@ export struct Analyzer {
 	symbols: *symbols.SymbolTable;
 	namespace: names.NameSpace;
 	heap: vec *void;
+	typeId: u64;
 
 	func error(self: *Analyzer, msg: *i8){
 		io.println(msg);
@@ -59,7 +60,7 @@ export struct Analyzer {
 		} else if self.symbols.getLabel(name, len) != false {
 			self.error("{name} is a label, not a variable.");
 		} else {
-			self.error("{name} variable not defined.");
+			// self.error("{name} variable not defined.");
 		}
 		return null;
 	};
@@ -95,6 +96,11 @@ export struct Analyzer {
 		case ast.StmtType.DEC:
 			self.dec(stmt);
 			break;
+		case ast.StmtType.TEMPLATE:
+			self.tmplate(stmt);
+			break;
+		default:
+			break;
 		}
 	};
 	func localStmt(self: *Analyzer, stmt: *ast.Stmt){
@@ -116,14 +122,12 @@ export struct Analyzer {
 	};
 	func dec(self: *Analyzer, stmt: *ast.Stmt){
 		dec := *cast(*ast.Declaration)(&stmt.data.dec); // yeah another bug in compiler
-
 		l1 := dec.idents.length;
 		l2 := dec.types.length;
 		
 		if dec.values == null {
 			goto next;
 		}
-		
 		if dec.values.length == 1 {
 			self.expr(dec.values[0]);
 			for dec.values.length != dec.idents.length {
@@ -134,12 +138,10 @@ export struct Analyzer {
 				self.expr(dec.values[i]);
 			}
 		}
-
 	label next:
 		if l2 == 1 {
 			t := dec.types[0];
 			self.type(t);
-
 			for dec.types.length != dec.idents.length {
 				dec.types.push(t);
 			}
@@ -162,6 +164,7 @@ export struct Analyzer {
 			n := cast(*names.NameInfo)(&ident.data.name);
 			n.index = self.namespace.index;
 			n.type = names.NameType.VAR;
+
 			self.addVar(ident.buff, ident.len, dec.types[i]);
 		}
 	};
@@ -183,6 +186,27 @@ export struct Analyzer {
 		fnc.name.index = self.namespace.index;
 
 		self.block(fnc.body);
+	};
+	func tmplate(self: *Analyzer, stmt: *ast.Stmt){
+		tmplate := *cast(*ast.Template)(&stmt.data.tmplate);
+		
+		t := new ast.Type{
+			type:   ast.TypeType.TEMPLATE,
+			data:   (ast.TypeUnion){ tmplate: tmplate.type },
+			buff:   stmt.buff,
+			len:    stmt.len,
+			line:   stmt.line,
+			column: stmt.column
+		};
+		
+		self.heap.push(cast(*void)t);
+		self.addVar(tmplate.name.tok.buff, tmplate.name.tok.len, t);
+	};
+	func exprVec(self: *Analyzer, exprs: *void){
+		exprVec := cast(vec *ast.Expr)exprs;
+		for i := 0; i < exprVec.length; ++i {
+			self.expr(exprVec[i]);
+		}
 	};
 	func expr(self: *Analyzer, expr: *ast.Expr){
 		switch expr.type {
@@ -224,6 +248,11 @@ export struct Analyzer {
 			break;
 		case ast.ExprType.MEMBER:
 			self.memberExpr(expr);
+			break;
+		case ast.ExprType.GENCALL:
+			self.genCall(expr);
+			break;
+		default:
 			break;
 		}
 	};
@@ -279,11 +308,11 @@ export struct Analyzer {
 	func compLit(self: *Analyzer, expr: *ast.Expr){
 		e := *cast(*ast.CompLit)&expr.data.compLit;
 		vals := e.values;
-		feilds := e.fields;
+		fields := e.fields;
 		
 		self.type(e.type);
 
-		// handle feild repetition here
+		// handle field repetition here
 		if vals != null {
 			for val, i := vals[0], 0; i < vals.length; val = vals[++i] {
 				self.expr(val);
@@ -304,6 +333,8 @@ export struct Analyzer {
 			break;
 		case ast.TypeType.VECTOR:
 			expr.eType = cast(*ast.Type)t.data.vector.base;
+			break;
+		default:
 			break;
 		}
 	};
@@ -343,17 +374,19 @@ export struct Analyzer {
 		expr.eType = e.eType.data.promse.base;	
 	};
 	func callExpr(self: *Analyzer, expr: *ast.Expr){
-
+		self.expr(expr.data.callExpr.function);
+		self.exprVec(expr.data.callExpr.args);
 	};
 	func memberExpr(self: *Analyzer, expr: *ast.Expr){
 		e := cast(*ast.Expr)expr.data.member.base;
 		self.expr(e);
+	};
+	func genCall(self: *Analyzer, expr: *ast.Expr){
+		e := cast(*ast.Expr)expr.data.genCall.expr;
+		self.expr(e);
 
-		if e.eType.type == ast.TypeType.POINTER {
-			expr.data.member.pointer = true;
-		} else {
-			expr.data.member.pointer = false;
-		}
+		expr.data.genCall.index = (cast(*ast.TemplateType)(&e.eType.data.tmplate)).args.length;
+		(cast(*ast.TemplateType)(&e.eType.data.tmplate)).args.push(cast(vec *ast.Type)expr.data.genCall.types);
 	};
 	func getTypeIdent(self: *Analyzer, ident: *ast.IdentExpr) *ast.Type {
 		return self.getVar(ident.tok.buff, ident.tok.len);
@@ -372,7 +405,7 @@ export struct Analyzer {
 	};
 
 	func type(self: *Analyzer, type: *ast.Type){
-
+		
 	};
 	func pointerTo(self: *Analyzer, type: *ast.Type) *ast.Type {
 		t := new ast.Type{type: ast.TypeType.POINTER, data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}};
