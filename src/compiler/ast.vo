@@ -18,8 +18,8 @@ export enum ExprType {
 	ARRLIT,
 	BINARY,
 	TERNARY,
-	GENCALL,
 	COMPLIT,
+	GENCALL,
 	ELEMENT,
 	NUM_LIT,
 	CHR_LIT,
@@ -181,6 +181,7 @@ export enum TypeType {
 	STRUCT,
 	VECTOR,
 	STATIC,
+	GENCALL,
 	CAPTURE,
 	PROMISE,
 	POINTER,
@@ -244,7 +245,7 @@ export struct PointerType {
 	base: *Type;
 };
 
-export enum TypeOrExpr {
+export enum TypeExprEnum {
 	NULL,
 	TYPE,
 	EXPR
@@ -255,9 +256,13 @@ export union TypeExprUnion {
 	expr: *Expr;
 };
 
+export struct TypeOrExpr {
+	type: TypeExprEnum;
+	data: TypeExprUnion;
+};
+
 export struct TemplateType {
-	type:   TypeOrExpr;
-	data:   TypeExprUnion;
+	data:   TypeOrExpr;
 	params: vec IdentExpr;
 	args:   vec vec *Type;
 };
@@ -278,6 +283,7 @@ export union TypeUnion {
 	pointer:  PointerType;
 	impArray: ImpArrayType;
 	tmplate:  TemplateType;
+	genCall:  GenCall;
 };
 
 export struct Type {

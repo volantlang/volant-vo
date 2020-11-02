@@ -940,11 +940,11 @@ export struct Parser {
 		self.eat();
 
 		if self.peek().sType == tokens.STokenType.FUNC {
-			tmplate.type.data.expr = self.funcExpr();
-			tmplate.type.type = ast.TypeOrExpr.EXPR;
+			tmplate.type.data.data.expr = self.funcExpr();
+			tmplate.type.data.type = ast.TypeExprEnum.EXPR;
 		} else {
-			tmplate.type.data.type = self.type();
-			tmplate.type.type = ast.TypeOrExpr.TYPE;
+			tmplate.type.data.data.type = self.type();
+			tmplate.type.data.type = ast.TypeExprEnum.TYPE;
 		}
 
 		tmplate.type.args = (vec vec *ast.Type){};
@@ -1119,7 +1119,6 @@ export struct Parser {
 		return left;
 	};
 	func expr9(self: *Parser) *ast.Expr { // unuary *, &, +, -, ++, --, !, ~, new, cast, sizeof
-		
 		switch tok, state := self.peek(), self.state(); tok.sType {
 		case tokens.STokenType.CAST:
 			return self.castExpr();
@@ -1147,7 +1146,7 @@ export struct Parser {
 			return self.expr10();
 		}
 	};
-	func expr10(self: *Parser) *ast.Expr { // posifix ++, --, function call, member, element
+	func expr10(self: *Parser) *ast.Expr { // posifix ++, --, function call, element, generic call
 		state := self.state();
 		e := self.expr11();
 		x: *ast.Expr;
@@ -1162,8 +1161,10 @@ export struct Parser {
 		case tokens.PTokenType.LBRACE:
 			self.eat();
 			index := self.expr();
+
 			self.expectPri(tokens.PTokenType.RBRACE);
 			self.eat();
+			
 			x = self.exprNode(&state);
 			x.type = ast.ExprType.ELEMENT;
 			x.data.element = (ast.ElementExpr){base: e, index: index};
@@ -1181,17 +1182,8 @@ export struct Parser {
 			x.data.unary = (ast.UnaryExpr){expr: e, op: new ast.Operator{tok}};
 			e = x;
 			goto loop;
-		case tokens.STokenType.DOT:
-			self.eat();
-			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
-			self.eat();
-			x = self.exprNode(&state);
-			x.type = ast.ExprType.MEMBER;
-			x.data.member = (ast.MemberExpr){base: e, prop: prop};
-			e = x;
-			goto loop;
 		case tokens.STokenType.LNOT:
-			e = self.genCall(e, &state);
+			e = self.genCallExpr(e, &state);
 			goto loop;
 		default:
 			return e;
@@ -1199,37 +1191,59 @@ export struct Parser {
 	};
 	func expr11(self: *Parser) *ast.Expr { // parenthesis, compound literal, array initializer
 		state := self.state();
-		e: *ast.Type;
 
 		switch self.peek().pType {
-		case tokens.PTokenType.LPAREN:
-			e = self.type();
-			break;
 		case tokens.PTokenType.LCBRACE:
 			return self.arrayInitializer();
+		case tokens.PTokenType.LPAREN:
+			break;
 		default:
 			return self.expr12();
 		}
-
+		self.eat();
+		e := self.exprOrType();
+		
+		self.expectPri(tokens.PTokenType.RPAREN);
+		self.eatRaw();
+		
 		if self.peek().pType != tokens.PTokenType.LCBRACE {
+			self.assert(e.type == ast.TypeExprEnum.EXPR, "gib expression, not type.");
 			self.clean();
-			self.assert(e.type == ast.TypeType.BASIC, "gib expression, not type.");
-			
-			expr := cast(*ast.Expr)e.data.basic.expr;
-			delete e;
-			return expr;
+			return cast(*ast.Expr)e.data.expr;
 		}
-
-		c := (ast.CompLit){type: e};
+		if e.type == ast.TypeExprEnum.EXPR {
+			t := self.typeNode(&state);
+			t.type = ast.TypeType.BASIC;
+			t.data.basic = (ast.BasicType){expr: e.data.expr};
+			e.data.type = t;
+		}
+		c := (ast.CompLit){type: e.data.type};
 		self.compLitData(&c);
 
 		ee := self.exprNode(&state);
 		ee.type = ast.ExprType.COMPLIT;
 		ee.data.compLit = c;
-
 		return ee;
 	};
-	func expr12(self: *Parser) *ast.Expr {
+	func expr12(self: *Parser) *ast.Expr { // member
+		state := self.state();
+		e := self.expr13();
+		x := e;
+
+		for self.peek().sType == tokens.STokenType.DOT {
+			self.eat();
+			
+			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
+			self.eat();
+			
+			x = self.exprNode(&state);
+			x.type = ast.ExprType.MEMBER;
+			x.data.member = (ast.MemberExpr){base: e, prop: prop};
+			e = x;
+		}
+		return x;
+	};
+	func expr13(self: *Parser) *ast.Expr {
 		state := self.state();
 		tok := self.peek();
 		expr: *ast.Expr;
@@ -1264,19 +1278,25 @@ export struct Parser {
 		default:
 			break;
 		}
-
-		tok.println();
 		self.error("expected expr, got {tok}");
-		return null;
-
-	label end:
-		expr.buff = tok.buff;
-		expr.len = tok.len;
 		
+	label end:
+		expr.buff = tok.buff; // skip spaces
+		expr.len = tok.len;	
 		return expr;
 	};
-	func exprOrType(self: *Parser) *ast.Expr {
-		return self.expr();
+	func exprOrType(self: *Parser) ast.TypeOrExpr {
+		r := (ast.TypeOrExpr){};
+		switch self.peek().pType {
+		case tokens.PTokenType.LBRACE:
+			r.type = ast.TypeExprEnum.TYPE;
+			r.data.type = self.type();
+			break;
+		default:
+			r.type = ast.TypeExprEnum.EXPR;
+			r.data.type = self.expr();
+		}
+		return r;
 	};
 	func callExpr(self: *Parser, function: *ast.Expr, statePtr: *ParserState) *ast.Expr {
 		self.eat();
@@ -1364,7 +1384,7 @@ export struct Parser {
 		expr.data.castExpr = (ast.CastExpr){expr: e, type: type};
 		return expr;
 	};
-	func genCall(self: *Parser, e: *ast.Expr, statePtr: *ParserState) *ast.Expr {
+	func genCallExpr(self: *Parser, e: *ast.Expr, statePtr: *ParserState) *ast.Expr {
 		self.eat();
 		g := (ast.GenCall){expr: e};
 
@@ -1641,11 +1661,34 @@ export struct Parser {
 			break;
 		}
 		state := self.state();
-		expr := self.expr();
+		expr := self.expr12();
+
+		if self.peek().sType == tokens.STokenType.LNOT {
+			return self.genCallType(expr, &state);
+		}
 
 		type := self.typeNode(&state);
 		type.type = ast.TypeType.BASIC;
 		type.data.basic = (ast.BasicType){expr};
+		return type;
+	};
+	func genCallType(self: *Parser, e: *ast.Expr, statePtr: *ParserState) *ast.Type {
+		self.eat();
+		g := (ast.GenCall){expr: e};
+
+		if self.peek().pType == tokens.PTokenType.LPAREN {
+			self.eat();
+			g.types = self.typeVec();
+
+			self.expectPri(tokens.PTokenType.RPAREN);
+			self.eat();
+		} else {
+			g.types = (vec *ast.Type){self.type()};
+		}
+
+		type := self.typeNode(statePtr);
+		type.type = ast.TypeType.GENCALL;
+		type.data.genCall = g;
 		return type;
 	};
 	func funcType(self: *Parser) *ast.Type {

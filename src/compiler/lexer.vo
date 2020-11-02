@@ -11,7 +11,7 @@ export struct Lexer {
 
 	position: size_t = 0;
 	column:   size_t = 0;
-	line:	 size_t = 1;
+	line:	  size_t = 1;
 
 	func peek(self: *Lexer) i8 {
 		return *(self.buff + self.position);

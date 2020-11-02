@@ -151,7 +151,7 @@ export struct Token {
 		mem.copy(str, "{\n\tpType: ", 10);
 		str += 10;
 
-		buf: [20]u8;
+		buf: [20]i8;
 		n := num.utos(cast(u32)self.pType, buf);
 
 		mem.copy(str, buf, n);

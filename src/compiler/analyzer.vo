@@ -39,14 +39,14 @@ export struct Analyzer {
 		}
 	};
 	func addType(self: *Analyzer, name: *i8, len: size_t, type: *ast.Type){
-		if self.symbols.getTypeInCurr(name, len) == null && self.symbols.getVar(name, len) == null && self.symbols.getLabel(name, len) == null {
+		if self.symbols.getTypeInCurr(name, len) == null && self.symbols.getVar(name, len) == null && self.symbols.getLabel(name, len) == false {
 			self.symbols.addType(name, len, type);
 		} else {
 			self.error("{name} already defined.");
 		}
 	};
 	func addLabel(self: *Analyzer, name: *i8, len: size_t){
-		if self.symbols.getLabel(name, len) == null {
+		if self.symbols.getLabel(name, len) == false {
 			self.symbols.addLabel(name, len);
 		} else {
 			self.error("{name} already defined.");
@@ -72,7 +72,8 @@ export struct Analyzer {
 		} else if self.symbols.getLabel(name, len) != false {
 			self.error("{name} is a label, not a type.");
 		} else {
-			self.error("{name} type not defined.");
+			// io.printnln(name, len);
+			// self.error("{name} type not defined.");
 		}
 		return null;
 	};
@@ -99,6 +100,9 @@ export struct Analyzer {
 		case ast.StmtType.TEMPLATE:
 			self.tmplate(stmt);
 			break;
+		case ast.StmtType.TYPEDEF:
+			self.tdef(stmt);
+			break;
 		default:
 			break;
 		}
@@ -111,6 +115,9 @@ export struct Analyzer {
 		case ast.StmtType.EXPR:
 			self.expr(stmt.data.expr.expr);
 			break;
+		case ast.StmtType.ASSIGN:
+			self.assign(stmt.data.assign);
+			break;
 		default:
 			break;
 		}
@@ -119,6 +126,12 @@ export struct Analyzer {
 		for i := 0; i < block.stmts.length; ++i {
 			self.localStmt(block.stmts[i]);
 		}
+	};
+	func tdef(self: *Analyzer, stmt: *ast.Stmt){
+		tdef := *cast(*ast.Typedef)(&stmt.data.tdef);
+		
+		self.type(tdef.type);
+		self.addType(tdef.name.tok.buff, tdef.name.tok.len, tdef.type);
 	};
 	func dec(self: *Analyzer, stmt: *ast.Stmt){
 		dec := *cast(*ast.Declaration)(&stmt.data.dec); // yeah another bug in compiler
@@ -151,10 +164,9 @@ export struct Analyzer {
 			}
 		} else {
 			for i := 0; i < dec.types.length; ++i {
-				dec.types.push(dec.types[i]);
+				self.type(dec.types[i]);
 			}
-		}
-		
+		}		
 		if dec.types.length != l1 {
 			self.error("expected {l1} types, got {l2}.");
 		} else if dec.values != null && dec.values.length != l1 {
@@ -187,6 +199,14 @@ export struct Analyzer {
 
 		self.block(fnc.body);
 	};
+	func assign(self: *Analyzer, assign: ast.Assignment){
+		self.assert(assign.vars.length == assign.vals.length, "Expected {assign.vars.length} values, got {assign.vals.length}");
+		for i := 0; i < assign.vars.length; ++i {
+			self.expr(assign.vars[i]);
+			self.expr(assign.vals[i]);
+			// self.assert(self.compareTypes(assign.vars[i].eType, assign.vals[i].eType), "Type mismatch in assignment");
+		}
+	};
 	func tmplate(self: *Analyzer, stmt: *ast.Stmt){
 		tmplate := *cast(*ast.Template)(&stmt.data.tmplate);
 		
@@ -199,8 +219,17 @@ export struct Analyzer {
 			column: stmt.column
 		};
 		
+		switch tmplate.type.data.type {
+		case ast.TypeExprEnum.TYPE:
+			self.addType(tmplate.name.tok.buff, tmplate.name.tok.len, t);	
+			break;
+		case ast.TypeExprEnum.EXPR:
+			self.addVar(tmplate.name.tok.buff, tmplate.name.tok.len, t);
+			break;
+		default:
+			break;
+		}
 		self.heap.push(cast(*void)t);
-		self.addVar(tmplate.name.tok.buff, tmplate.name.tok.len, t);
 	};
 	func exprVec(self: *Analyzer, exprs: *void){
 		exprVec := cast(vec *ast.Expr)exprs;
@@ -250,9 +279,10 @@ export struct Analyzer {
 			self.memberExpr(expr);
 			break;
 		case ast.ExprType.GENCALL:
-			self.genCall(expr);
+			self.genCallExpr(expr);
 			break;
 		default:
+			expr.eType = null;
 			break;
 		}
 	};
@@ -374,19 +404,45 @@ export struct Analyzer {
 		expr.eType = e.eType.data.promse.base;	
 	};
 	func callExpr(self: *Analyzer, expr: *ast.Expr){
-		self.expr(expr.data.callExpr.function);
+		fnc := cast(*ast.Expr)expr.data.callExpr.function;
+
+		self.expr(fnc);
 		self.exprVec(expr.data.callExpr.args);
+		
+		// temporary
+		if fnc.eType != null {
+			expr.eType = cast(*ast.Type)fnc.eType.data.fnc.returnType;
+		}
 	};
 	func memberExpr(self: *Analyzer, expr: *ast.Expr){
 		e := cast(*ast.Expr)expr.data.member.base;
 		self.expr(e);
 	};
-	func genCall(self: *Analyzer, expr: *ast.Expr){
+	func genCallExpr(self: *Analyzer, expr: *ast.Expr){
 		e := cast(*ast.Expr)expr.data.genCall.expr;
 		self.expr(e);
 
-		expr.data.genCall.index = (cast(*ast.TemplateType)(&e.eType.data.tmplate)).args.length;
-		(cast(*ast.TemplateType)(&e.eType.data.tmplate)).args.push(cast(vec *ast.Type)expr.data.genCall.types);
+		args := (cast(*ast.TemplateType)(&e.eType.data.tmplate)).args;
+		i := 0;
+		for i < args.length && !self.compareTypeVec(args[i], expr.data.genCall.types) { ++i; }
+		
+		if i == args.length {
+			args.push(cast(vec *ast.Type)expr.data.genCall.types);
+		}
+		expr.data.genCall.index = i;
+	};
+	func genCallType(self: *Analyzer, type: *ast.Type){
+		e := cast(*ast.Expr)type.data.genCall.expr;
+		self.basicType(e);
+		
+		args := (cast(*ast.TemplateType)(&e.eType.data.tmplate)).args;
+		i := 0;
+		for i < args.length && !self.compareTypeVec(args[i], type.data.genCall.types) { ++i; }
+		
+		if i == args.length {
+			args.push(cast(vec *ast.Type)type.data.genCall.types);
+		}
+		type.data.genCall.index = i;
 	};
 	func getTypeIdent(self: *Analyzer, ident: *ast.IdentExpr) *ast.Type {
 		return self.getVar(ident.tok.buff, ident.tok.len);
@@ -403,9 +459,32 @@ export struct Analyzer {
 			return type;
 		}
 	};
-
 	func type(self: *Analyzer, type: *ast.Type){
-		
+		switch type.type {
+		case ast.TypeType.BASIC:
+			self.basicType(cast(*ast.Expr)type.data.basic.expr);
+			break;
+		case ast.TypeType.GENCALL:
+			self.genCallType(type);
+			break;
+		case ast.TypeType.POINTER:
+			self.type(cast(*ast.Type)type.data.pointer.base);
+			break;
+		case ast.TypeType.ARRAY:
+			self.type(cast(*ast.Type)type.data.array.base);
+			break;
+		case ast.TypeType.IMPARRAY:
+			self.type(cast(*ast.Type)type.data.impArray.base);
+			break;
+		default:
+			break;
+		}
+	};
+	func basicType(self: *Analyzer, expr: *ast.Expr){
+		if expr.type == ast.ExprType.IDENT {
+			type := self.getType(expr.buff, expr.len);
+			expr.eType = type;
+		}
 	};
 	func pointerTo(self: *Analyzer, type: *ast.Type) *ast.Type {
 		t := new ast.Type{type: ast.TypeType.POINTER, data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}};
@@ -413,7 +492,47 @@ export struct Analyzer {
 		return t;
 	};
 	func compareTypes(self: *Analyzer, type1: *ast.Type, type2: *ast.Type) bool {
-		return true;
+		switch type1.type {
+		case ast.TypeType.CAPTURE:
+			return self.compareTypes(type1.data.cpture.base, type2);
+		case ast.TypeType.STATIC:
+			return self.compareTypes(type1.data.statc.base, type2);
+		default:
+			break;
+		}
+		switch type2.type {
+		case ast.TypeType.CAPTURE:
+			return self.compareTypes(type1, type2.data.cpture.base);
+		case ast.TypeType.STATIC:
+			return self.compareTypes(type1, type2.data.statc.base);
+		default:
+			break;
+		}
+
+		if type1.type != type2.type {
+			return false;
+		}
+
+		switch type1.type {
+		case ast.TypeType.POINTER:
+			return self.compareTypes(type1.data.pointer.base, type2.data.pointer.base);
+		case ast.TypeType.CONST:
+			return self.compareTypes(type1.data.cnst.base, type2.data.cnst.base);
+		default:
+			return true;
+		}
+	};
+	func compareTypeVec(self: *Analyzer, types1: *void, types2: *void) bool {
+		typeVec1 := cast(vec *ast.Type)types1;
+		typeVec2 := cast(vec *ast.Type)types2;
+
+		if typeVec1.length != typeVec2.length {
+			return false;
+		}
+
+		i := 0;
+		for i < typeVec1.length && self.compareTypes(typeVec1[i], typeVec2[i]) { ++i; }
+		return i == typeVec1.length;
 	};
 };
 
