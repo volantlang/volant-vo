@@ -94,15 +94,6 @@ struct Buff {
 		}
 	};
 	func append(self: *Buff, str: *i8, len: u32){
-		// io.println("here");
-
-		/*
-		for i := 0; i < len; ++i {
-			self.push(str[i]);
-		}
-		return;
-		*/
-			
 		m: *i64;
 		s: *i64 = cast(*i64)str;
 		
