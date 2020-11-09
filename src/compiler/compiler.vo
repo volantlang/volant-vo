@@ -53,10 +53,11 @@ func NewTypeContext() TypeContext {
 };
 
 struct CompilerContext {
-	num:    u32;
-	mcases: vec *ast.Pattern;
-	stack:  vec *ast.Stmt;
-	
+	num:     u32;
+	mcases:  vec *ast.Pattern;
+	stack:   vec *ast.Stmt;
+	varargs: *ast.IdentExpr;
+
 	func free(self: *CompilerContext){
 		self.mcases.free();
 		self.stack.free();
@@ -69,9 +70,10 @@ struct CompilerContext {
 };
 func NewCompilerContext() CompilerContext {
 	return (CompilerContext){
-		num:    0,
-		mcases: (vec *ast.Pattern){},
-		stack:  (vec ast.StmtType){},
+		num:     0,
+		mcases:  (vec *ast.Pattern){},
+		stack:   (vec ast.StmtType){},
+		varargs: null,
 	};
 };
 
@@ -289,15 +291,14 @@ export struct Compiler {
 		}
 	};
 	func ident(self: *Compiler, ident: *ast.IdentExpr){
-		if p := names.getPrefix(ident.name.type); p != 0 {
-			self.push(p);
+		p := names.getPrefix(ident.name.type);
+		self.push(p);
 
-			if names.isIndexed(ident.name.type) {
-				b: [10]i8;
-				self.append(b, num.utos(ident.name.index, b));
-			}
-			self.push('_');
+		if names.isIndexed(ident.name.type) {
+			b: [10]i8;
+			self.append(b, num.utos(ident.name.index, b));
 		}
+		self.push('_');
 		self.append(cast(*i8)ident.tok.buff, ident.tok.len);
 	};
 	func operator(self: *Compiler, op: *ast.Operator){
@@ -308,11 +309,138 @@ export struct Compiler {
 	};
 	func file(self: *Compiler, file: ast.File) {
 		self.append("#include \"internal/default.h\"\n", 30);
-	
-		for i := 0; i < file.stmts.length; ++i {
-			self.stmt(file.stmts[i]);
+		i: i32;
+
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.__C {
+				self.___c(s.data.___c);
+				self.semicolon();
+				self.newline();
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.TYPEDEF {
+				self.globalTypedef1(s.data.tdef);
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.TYPEDEF {
+				self.globalTypedef2(s.data.tdef);
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.FUNC {
+				self.globalFuncDec1(s.data.funcDec);
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.DEC {
+				self.globalDec(s.data.dec);
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.TYPEDEF {
+				self.globalTypedef3(s.data.tdef);
+			}
+		}
+		self.newline();
+		for i = 0; i < file.stmts.length; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.FUNC {
+				self.globalFuncDec2(s.data.funcDec);
+			}
 		}
 		self.buff.checkNFlush();
+	};
+	func globalDec(self: *Compiler, dec: ast.Declaration){
+		self.dec(dec);
+		self.semicolon();
+		self.newline();
+	};
+	func globalTypedef1(self: *Compiler, tdef: ast.Typedef){
+		switch tdef.type.type {
+		case ast.TypeType.STRUCT:
+			self.append("typedef struct ", 15);
+			self.ident(tdef.name);
+			self.space();
+			self.ident(tdef.name);
+			break;
+		default:
+			self.append("typedef ", 8);
+			self.decTypeIdent(tdef.type, tdef.name);
+			break;
+		}
+		self.semicolon();
+		self.newline();
+	};
+	func globalTypedef2(self: *Compiler, tdef: ast.Typedef){
+		if tdef.type.type != ast.TypeType.STRUCT {
+			return;
+		}
+
+		self.append("typedef struct ", 15);
+		self.ident(tdef.name);
+		self.space();
+		self.openCBrace();
+		self.pushScope();
+
+		strct := *cast(*ast.StructType)(&tdef.type.data.strct);
+
+		for i := 0; i < strct.props.idents.length; ++i {
+			self.newline();
+			self.indent();
+			self.decTypeIdent(strct.props.types[i], &strct.props.idents[i]);
+			self.semicolon();
+		}
+		
+		self.popScope();
+		self.newline();
+		self.closeCBrace();
+		self.ident(tdef.name);
+		self.semicolon();
+		self.newline();
+		self.newline();
+		
+		for i := 0; i < strct.methods.idents.length; ++i {
+			self.funcDecType(strct.methods.types[i].data.fnc, &strct.methods.idents[i]);
+			self.semicolon();
+			self.newline();
+		}
+		for i := 0; i < strct.tmplates.idents.length; ++i {
+			self.tmplateOnlyDec((ast.Template){name: &strct.tmplates.idents[i], type: strct.tmplates.types[i].data.tmplate});
+		}
+	};
+	func globalTypedef3(self: *Compiler, tdef: ast.Typedef){
+		if tdef.type.type != ast.TypeType.STRUCT {
+			return;
+		}
+		strct := *cast(*ast.StructType)(&tdef.type.data.strct);
+
+		for i := 0; i < strct.methods.idents.length; ++i {
+			self.funcDecType(strct.methods.types[i].data.fnc, &strct.methods.idents[i]);
+			self.block(strct.methods.blocks[i]);
+			self.semicolon();
+			self.newline();
+		}
+		for i := 0; i < strct.tmplates.idents.length; ++i {
+			self.tmplate((ast.Template){name: &strct.tmplates.idents[i], type: strct.tmplates.types[i].data.tmplate});
+			self.semicolon();
+			self.newline();
+		}
+	};
+	func globalFuncDec1(self: *Compiler, fnc: ast.FuncDec){
+		self.funcDecNoBlock(fnc);
+		self.semicolon();
+		self.newline();
+	};
+	func globalFuncDec2(self: *Compiler, fnc: ast.FuncDec){
+		self.funcDec(fnc);
+		self.semicolon();
+		self.newline();
 	};
 	func stmt(self: *Compiler, stmt: *ast.Stmt){
 		self.newline();
@@ -455,12 +583,15 @@ export struct Compiler {
 		self.expr(stmt.expr);
 	};
 	func dec(self: *Compiler, dec: ast.Declaration){
-		if dec.values == null || dec.values.length == 0 {
+		if dec.values == null {
 			self.decNoVal(dec);
-			return;
+		} else {
+			self.decVal(dec);
 		}
+	};
+	func decVal(self: *Compiler, dec: ast.Declaration){
 		i := 0;
-		
+
 		b := ([5]*i8){"", "static ", "extern ", "extern ", "register "}[dec.sClass];
 		l := ([5]size_t){0, 7, 7, 7, 9}[dec.sClass];
 		
@@ -571,10 +702,20 @@ export struct Compiler {
 		}
 	};
 	func rturn(self: *Compiler, rturn: ast.Return){
-		self.append("RETURN", 6);
-		self.openParen();
-		self.expr(rturn.val);
-		self.closeParen();
+		if self.context.varargs != null {
+			self.append("va_end(", 7);
+			self.ident(self.context.varargs);
+			self.append(".p_list)", 8);
+			self.semicolon();
+			self.newline();
+			self.indent();
+		}
+		self.append("return", 6);
+
+		if rturn.val != null {
+			self.space();
+			self.expr(rturn.val);
+		}
 	};
 	func ifElse(self: *Compiler, ifElse: ast.IfElse){
 		c := 0;
@@ -798,6 +939,45 @@ export struct Compiler {
 			} else {
 				self.decTypeIdentNBuff(&(ast.Type){data: (ast.TypeUnion){fnc: *(cast(*ast.Expr)x.expr).data.funcExpr.type}, type: ast.TypeType.FUNC}, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
 				self.block((cast(*ast.Expr)x.expr).data.funcExpr.body);
+			}
+
+			self.semicolon();
+			for j := 0; j < tmplate.type.params.length; ++j {
+				self.newline();
+				self.append("#undef ", 7);
+				self.ident(&tmplate.type.params[j]);
+			}
+			self.newline();
+		}
+	};
+	func tmplateOnlyDec(self: *Compiler, tmplate: ast.Template){
+		buff: [10]i8 = {'g'};
+		
+		c := (Compiler){
+			scopeCount: self.scopeCount, 
+			buff: NewBuff(cast(BuffCb)self.macroAppend, self), 
+			context: NewCompilerContext()
+		};
+		
+		for i: u32 = 0; i < tmplate.type.datas.length; ++i {
+			x := tmplate.type.datas[i];
+			arg := tmplate.type.args[i];
+
+			for j := 0; j < tmplate.type.params.length; ++j {
+				c.append("#define ", 8);
+				c.ident(&tmplate.type.params[j]);
+				c.space();
+				c.type(arg[j]);
+
+				c.reset();
+				self.newline();
+			}
+			
+			if cast(u32)tmplate.type.type == cast(u32)ast.TypeExprEnum.TYPE { // bog
+				self.append("typedef ", 8);
+				self.decTypeIdentNBuff(cast(*ast.Type)x.type, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
+			} else {
+				self.decTypeIdentNBuff(&(ast.Type){data: (ast.TypeUnion){fnc: *(cast(*ast.Expr)x.expr).data.funcExpr.type}, type: ast.TypeType.FUNC}, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
 			}
 
 			self.semicolon();
@@ -1077,7 +1257,11 @@ export struct Compiler {
 		self.openCBrace();
 		self.pushScope();
 		
+		v := self.context.varargs;
+
 		if type.varargs != null {
+			self.context.varargs = type.varargs;
+
 			self.newline();
 			self.indent();
 			self.append("v0__Arguments ", 14);
@@ -1088,21 +1272,8 @@ export struct Compiler {
 			self.append("va_start(", 9);
 			self.ident(type.varargs);
 			self.append(".p_list, i_lll);", 16);
-			self.newline();
-			self.indent();
-			self.append("#undef RETURN", 13);
-			self.newline();
-			self.indent();
-			self.append("#define RETURN(expr) va_end(", 28);
-			self.ident(type.varargs);
-			self.append(".p_list); return expr", 21);
 		} else {
-			self.newline();
-			self.indent();
-			self.append("#undef RETURN", 13);
-			self.newline();
-			self.indent();
-			self.append("#define RETURN(expr) return expr", 32);
+			self.context.varargs = null;
 		}
 		for i := 0; i < body.stmts.length; ++i {
 			self.stmt(body.stmts[i]);
@@ -1114,13 +1285,8 @@ export struct Compiler {
 			self.ident(type.varargs);
 			self.append(".p_list);", 9);
 		}
+		self.context.varargs = v;
 		self.popScope();
-		self.newline();
-		self.indent();
-		self.append("#undef RETURN", 13);
-		self.newline();
-		self.indent();
-		self.append("#define RETURN(expr) return expr", 32);
 		self.indent();
 		self.newline();
 		self.closeCBrace();

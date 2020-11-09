@@ -136,8 +136,51 @@ export struct Analyzer {
 		}
 	};
 	func file(self: *Analyzer, file: ast.File) ast.File {
-		for i := 0; i < file.stmts.length; ++i {
-			self.globalStmt(file.stmts[i]);
+		l := file.stmts.length;
+		i: i32;
+
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.__C {
+				self.___c(s);
+			}
+		}
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.TYPEDEF {
+				tdef := *cast(*ast.Typedef)(&s.data.tdef);
+				self.addType(tdef.name.tok.buff, tdef.name.tok.len, tdef.type);
+			}
+		}
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.FUNC {						
+				fnc := *cast(*ast.FuncDec)(&s.data.funcDec);
+
+				t := new ast.Type{
+					type:   ast.TypeType.FUNC,
+					data:   (ast.TypeUnion){ fnc: fnc.type },
+					buff:   s.buff,
+					len:    s.len,
+					line:   s.line,
+					column: s.column
+				};
+
+				self.heap.push(cast(*void)t);
+				self.addVar(fnc.name.tok.buff, fnc.name.tok.len, t);
+			}
+		}
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.DEC {
+				self.dec(s.data.dec);
+			}
+		}
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.TYPEDEF {
+				self.tdefNoAdd(s);
+			}
+		}
+		for i = 0; i < l; ++i {
+			if s := file.stmts[i]; s.type == ast.StmtType.FUNC {
+				self.funcDecNoAdd(s);
+			}
 		}
 		return file;
 	};
@@ -219,6 +262,12 @@ export struct Analyzer {
 			self.localStmt(block.stmts[i]);
 		}
 	};
+	func tdefNoAdd(self: *Analyzer, stmt: *ast.Stmt){
+		tdef := cast(*ast.Typedef)(&stmt.data.tdef);
+		
+		self.var(&tdef.name.name);
+		self.type(tdef.type);
+	};
 	func tdef(self: *Analyzer, stmt: *ast.Stmt){
 		tdef := cast(*ast.Typedef)(&stmt.data.tdef);
 		
@@ -273,8 +322,14 @@ export struct Analyzer {
 			self.addVar(ident.buff, ident.len, dec.types[i]);
 		}
 	};
+	func funcDecNoBlockNoAdd(self: *Analyzer, stmt: *ast.Stmt){
+		fnc := *cast(*ast.FuncDec)(&stmt.data.funcDec);
+		self.var(&fnc.name.name);
+		self.funcType(fnc.type);
+	};
 	func funcDecNoBlock(self: *Analyzer, stmt: *ast.Stmt){
 		fnc := *cast(*ast.FuncDec)(&stmt.data.funcDec);
+		self.funcDecNoBlockNoAdd(stmt);
 
 		t := new ast.Type{
 			type:   ast.TypeType.FUNC,
@@ -286,9 +341,11 @@ export struct Analyzer {
 		};
 
 		self.heap.push(cast(*void)t);
-		self.var(&fnc.name.name);
 		self.addVar(fnc.name.tok.buff, fnc.name.tok.len, t);
-		self.funcType(fnc.type);
+	};
+	func funcDecNoAdd(self: *Analyzer, stmt: *ast.Stmt){
+		self.funcDecNoBlockNoAdd(stmt);
+		self.block(stmt.data.funcDec.body);
 	};
 	func funcDec(self: *Analyzer, stmt: *ast.Stmt){
 		self.funcDecNoBlock(stmt);
@@ -366,7 +423,9 @@ export struct Analyzer {
 		self.heap.push(cast(*void)t);
 	};
 	func rturn(self: *Analyzer, stmt: *ast.Stmt){
-		self.expr(stmt.data.rturn.val);
+		if val := cast(*ast.Expr)stmt.data.rturn.val; val != null {
+			self.expr(val);
+		}
 	};
 	func genric(self: *Analyzer, stmt: *ast.Stmt){
 		self.context.stack.push(stmt);

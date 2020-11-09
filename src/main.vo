@@ -8,9 +8,9 @@ import "compiler/analyzer.vo";
 import "compiler/compiler.vo";
 
 func print(v: *void, str: *i8, len: u32){
-	// io.println("\n_______Chunk recieved_______\n");
+	// io.println("\n/*_______Chunk recieved_______*/");
 	io.printn(str, len);
-	// io.println("\n_____________end____________\n");
+	// io.println("\n/*_____________end____________*/");
 };
 
 func main() i32 {	
@@ -33,7 +33,15 @@ func main() i32 {
 	a := analyzer.NewAnalyzer();
 	c := compiler.NewCompiler(0, print, null);
 	
-	c.file(a.file(p.file()));
+	start: $timeval;
+	end: $timeval;
 
+	$gettimeofday(&start, null);
+	c.file(a.file(p.file()));
+	$gettimeofday(&end, null);
+
+	time := ((cast(u64)end.tv_sec - cast(u64)start.tv_sec) * 1000000) + (cast(u64)end.tv_usec - cast(u64)start.tv_usec);
+
+	$printf("\n// time taken: %lluus.\n", time);
 	return 0;
 };

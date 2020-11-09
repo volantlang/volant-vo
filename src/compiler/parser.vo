@@ -411,6 +411,10 @@ export struct Parser {
 	};
 	func rturnRaw(self: *Parser) ast.Return {
 		self.eat();
+
+		if self.peek().pType == tokens.PTokenType.SEMICOLON {
+			return (ast.Return){val: null};
+		}
 		return (ast.Return){val: self.expr()};
 	};
 	func switchCase(self: *Parser) *ast.Stmt {
