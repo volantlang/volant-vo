@@ -1,0 +1,344 @@
+import "io.vo";
+import "tokens.vo";
+import "ast.vo";
+
+export struct Copier {
+	nothing: u8;
+	
+	func stmtNode(self: *Copier, stmt: *ast.Stmt) *ast.Stmt {
+		return new ast.Stmt{
+			type:   stmt.type,
+			line:   stmt.line,
+			column: stmt.column,
+			buff:   stmt.buff,
+			len:	stmt.len
+		};
+	};
+	func exprNode(self: *Copier, expr: *ast.Expr) *ast.Expr {
+		return new ast.Expr{
+			type:   expr.type,
+			line:   expr.line,
+			column: expr.column,
+			buff:   expr.buff,
+			len:	expr.len
+		};
+	};
+	func typeNode(self: *Copier, type: *ast.Type) *ast.Type {
+		return new ast.Type{
+			type:   type.type,
+			line:   type.line,
+			column: type.column,
+			buff:   type.buff,
+			len:	type.len
+		};
+	};
+    func stmt(self: *Copier, stmt: *ast.Stmt) *ast.Stmt {
+		s := self.stmtNode(stmt);
+		switch stmt.type {
+		case ast.StmtType.DEC:
+			s.data.dec = self.dec(stmt.data.dec);
+			break;
+		case ast.StmtType.LOOP:
+			s.data.loop = self.loop(stmt.data.loop);
+			break;
+		case ast.StmtType.SWITCH:
+			s.data.swtch = self.swtch(stmt.data.swtch);
+			break;
+		case ast.StmtType.MATCH:
+			s.data.mtch =  self.mtch(stmt.data.mtch);
+			break;
+		case ast.StmtType.IF_ELSE:
+			s.data.ifElse = self.ifElse(stmt.data.ifElse);
+			break;
+		case ast.StmtType.GENERIC:
+			s.data.genric = self.genric(stmt.data.genric);
+			break;
+		case ast.StmtType.RETURN:
+			s.data.rturn = self.rturn(stmt.data.rturn);
+			break;
+		case ast.StmtType.SCASE:
+			s.data.scase = self.scase(stmt.data.scase);
+			break;
+		case ast.StmtType.MCASE:
+			s.data.mcase = self.mcase(stmt.data.mcase);
+			break;
+		case ast.StmtType.GCASE:
+			s.data.gcase = self.gcase(stmt.data.gcase);
+			break;
+		case ast.StmtType.ASSIGN:
+			s.data.assign = self.assign(stmt.data.assign);
+			break;
+		case ast.StmtType.DELETE:
+			s.data.del = self.del(stmt.data.del);
+			break;
+		case ast.StmtType.FUNC:
+			s.data.funcDec = self.funcDec(stmt.data.funcDec);
+			break;
+		case ast.StmtType.LABEL:
+			s.data.labl = self.labl(stmt.data.labl);
+			break;
+		case ast.StmtType.GOTO:
+			s.data.gotoh = self.gotoh(stmt.data.gotoh);
+			break;
+		case ast.StmtType.EXPR:
+			s.data.expr = self.exprStmt(stmt.data.expr);
+			break;
+		case ast.StmtType.__C:
+			s.data.___c.stuff = self.exprVec(stmt.data.___c.stuff);
+			break;
+		default:
+			s.data = stmt.data;
+			break;
+		}
+		return s;
+	};
+	func stmtVec(self: *Copier, stmts: *void) vec *ast.Stmt {
+		stmtVec := cast(vec *ast.Stmt)stmts;
+		s := (vec *ast.Stmt){};
+
+		for i := 0; i < stmtVec.length; ++i {
+			s.push(self.stmt(stmtVec[i]));
+		}
+		return s;
+	};
+	func dec(self: *Copier, dec: ast.Declaration) ast.Declaration {
+		return (ast.Declaration){idents: self.exprVec(dec.idents), types: dec.types != null ? self.typeVec(dec.types) : null, values: dec.values != null ? self.exprVec(dec.values) : null, sClass: dec.sClass};
+	};
+	func loop(self: *Copier, loop: ast.Loop) ast.Loop {
+		return (ast.Loop){block: self.block(loop.block), initStmt: loop.initStmt != null ? self.stmt(loop.initStmt) : null, cond: loop.cond != null ? self.expr(loop.cond) : null, loopStmt: loop.loopStmt != null ? self.stmt(loop.loopStmt) : null};
+	};
+	func swtch(self: *Copier, swtch: ast.Switch) ast.Switch {
+		return (ast.Switch){expr: self.expr(swtch.expr), block: self.block(swtch.block), initStmt: swtch.initStmt != null ? self.stmt(swtch.initStmt) : null};
+	};
+	func genric(self: *Copier, genric: ast.Generic) ast.Generic {
+		return (ast.Generic){type: self.type(genric.type), block: self.block(genric.block), start: genric.start, end: genric.end, initStmt: genric.initStmt != null ? self.stmt(genric.initStmt) : null};
+	};
+	func mtch(self: *Copier, mtch: ast.Match) ast.Match {
+		return (ast.Match){expr: self.expr(mtch.expr), block: self.block(mtch.block), initStmt: mtch.initStmt != null ? self.stmt(mtch.initStmt) : null};
+	};
+	func ifElse(self: *Copier, ifElse: ast.IfElse) ast.IfElse {
+		i := (ast.IfElse){};
+		i.initStmts = (vec *ast.Stmt){};
+
+		s: *ast.Stmt;
+		for x := 0; x < ifElse.initStmts.length; ++x {
+			s = ifElse.initStmts[x];
+			i.initStmts.push(s != null ? self.stmt(s) : null);
+		}
+		i.conds = self.exprVec(ifElse.conds);
+		i.blocks = self.blockVec(ifElse.blocks);
+		i.elseBlock = self.block(ifElse.elseBlock);
+		return i;
+	};
+	func rturn(self: *Copier, rturn: ast.Return) ast.Return {
+		return (ast.Return){val: rturn.val != null ? self.expr(rturn.val) : null};
+	};
+	func scase(self: *Copier, scase: ast.SwitchCase) ast.SwitchCase {
+		return (ast.SwitchCase){val: self.expr(scase.val)};
+	};
+	func mcase(self: *Copier, mcase: ast.MatchCase) ast.MatchCase {
+		return (ast.MatchCase){val: self.pattern(mcase.val)};
+	};
+	func gcase(self: *Copier, gcase: ast.GenericCase) ast.GenericCase {
+		return (ast.GenericCase){val: self.type(gcase.val)};
+	};
+	func assign(self: *Copier, assign: ast.Assignment) ast.Assignment {
+		return (ast.Assignment){vars: self.exprVec(assign.vars), vals: self.exprVec(assign.vals), op: assign.op};
+	};
+	func del(self: *Copier, del: ast.Delete) ast.Delete {
+		return (ast.Delete){exprs: self.exprVec(del.exprs)};
+	};
+	func funcDec(self: *Copier, fnc: ast.FuncDec) ast.FuncDec {
+		return (ast.FuncDec){name: fnc.name, type: self.funcType(fnc.type), body: self.block(fnc.body)};
+	};
+	func labl(self: *Copier, labl: ast.Label) ast.Label {
+		return labl;
+	};
+	func gotoh(self: *Copier, gotoh: ast.Goto) ast.Goto {
+		return gotoh;
+	};
+	func block(self: *Copier, block: ast.Block) ast.Block {
+		return (ast.Block){stmts: self.stmtVec(block.stmts)};
+	};
+	func blockVec(self: *Copier, blocks: *void) vec ast.Block {
+		blockVec := cast(vec ast.Block)blocks;
+		b := (vec ast.Block){};
+
+		for i := 0; i < blockVec.length; ++i{
+			b.push(self.block(blockVec[i]));
+		}
+		return b;
+	};
+	func exprStmt(self: *Copier, expr: ast.ExprStmt) ast.ExprStmt {
+		return (ast.ExprStmt){expr: self.expr(expr.expr)};
+	};
+	func expr(self: *Copier, expr: *ast.Expr) *ast.Expr {
+		e := self.exprNode(expr);
+
+		switch expr.type {
+		case ast.ExprType.IDENT:
+			e.data.name = expr.data.name;
+			break;
+		case ast.ExprType.UNARY:
+			e.data.unary = self.unaryExpr(expr.data.unary);
+			break;
+		case ast.ExprType.BINARY:
+			e.data.binary = self.binaryExpr(expr.data.binary);
+			break;
+		case ast.ExprType.TERNARY:
+			e.data.ternary = self.ternaryExpr(expr.data.ternary);
+			break;
+		case ast.ExprType.IS:
+			e.data.isExpr = self.isExpr(expr.data.isExpr);
+			break;
+		case ast.ExprType.CALL:
+			e.data.callExpr = self.callExpr(expr.data.callExpr);
+			break;
+		case ast.ExprType.CAST:
+			e.data.castExpr = self.castExpr(expr.data.castExpr);
+			break;
+		case ast.ExprType.MEMBER:
+			e.data.member = self.member(expr.data.member);
+			break;
+		case ast.ExprType.ELEMENT:
+			e.data.element = self.element(expr.data.element);
+			break;
+		case ast.ExprType.COMPLIT:
+			e.data.compLit = self.compLit(expr.data.compLit);
+			break;
+		case ast.ExprType.ARRLIT:
+			e.data.arrayLit = self.arrayLit(expr.data.arrayLit);
+			break;
+		case ast.ExprType.NEW:
+			e.data.newExpr = self.newExpr(expr.data.newExpr);
+			break;
+		case ast.ExprType.SIZEOF:
+			e.data.sizeExpr = self.sizeExpr(expr.data.sizeExpr);
+			break;
+		case ast.ExprType.FUNC:
+			e.data.funcExpr = self.funcExpr(expr.data.funcExpr);
+			break;
+		case ast.ExprType.GENCALL:
+			e.data.genCall = self.genCall(expr.data.genCall);
+			break;
+		default:
+			e.data = expr.data;
+			break;
+		}
+		return e;
+	};
+	func exprVec(self: *Copier, exprs: *void) vec *ast.Expr {
+		exprVec := cast(vec *ast.Expr)exprs;
+		e := (vec *ast.Expr){};
+
+		for i := 0; i < exprVec.length; ++i {
+			e.push(self.expr(exprVec[i]));
+		}
+		return e;
+	};
+	func unaryExpr(self: *Copier, unary: ast.UnaryExpr) ast.UnaryExpr {
+		return (ast.UnaryExpr){expr: self.expr(unary.expr), op: unary.op};
+	};
+	func binaryExpr(self: *Copier, binary: ast.BinaryExpr) ast.BinaryExpr {
+		return (ast.BinaryExpr){left: self.expr(binary.left), right: self.expr(binary.right), op: binary.op};
+	};
+	func ternaryExpr(self: *Copier, ternary: ast.TernaryExpr) ast.TernaryExpr {
+		return (ast.TernaryExpr){left: self.expr(ternary.left), cond: self.expr(ternary.cond), right: self.expr(ternary.right)};
+	};
+	func isExpr(self: *Copier, isExpr: ast.IsExpr) ast.IsExpr {
+		return (ast.IsExpr){expr: self.expr(isExpr.expr), pattern: self.pattern(isExpr.pattern)};
+	};
+	func callExpr(self: *Copier, callExpr: ast.CallExpr) ast.CallExpr {
+		return (ast.CallExpr){function: self.expr(callExpr.function), args: self.exprVec(callExpr.args)};
+	};
+	func castExpr(self: *Copier, castExpr: ast.CastExpr) ast.CastExpr {
+		return (ast.CastExpr){expr: self.expr(castExpr.expr), type: self.type(castExpr.type)};
+	};
+	func member(self: *Copier, member: ast.MemberExpr) ast.MemberExpr {
+		return (ast.MemberExpr){base: self.expr(member.base), prop: member.prop};
+	};
+	func element(self: *Copier, element: ast.ElementExpr) ast.ElementExpr {
+		return (ast.ElementExpr){base: self.expr(element.base), index: self.expr(element.index)};
+	};
+	func compLit(self: *Copier, compLit: ast.CompLit) ast.CompLit {
+		return (ast.CompLit){type: self.type(compLit.type), fields: compLit.fields, values: compLit.values != null ? self.exprVec(compLit.values) : null};
+	};
+	func arrayLit(self: *Copier, arrayLit: ast.ArrayLit) ast.ArrayLit {
+		return (ast.ArrayLit){elements: self.exprVec(arrayLit.elements)};
+	};
+	func newExpr(self: *Copier, newExpr: ast.NewExpr) ast.NewExpr {
+		return (ast.NewExpr){type: newExpr.type != null ? self.type(newExpr.type) : null, val: newExpr.val != null ? self.expr(newExpr.val) : null};
+	};
+	func sizeExpr(self: *Copier, sizeExpr: ast.SizeExpr) ast.SizeExpr {
+		return (ast.SizeExpr){expr: self.expr(sizeExpr.expr)};
+	};
+	func awaitExpr(self: *Copier, awaitExpr: ast.AwaitExpr) ast.AwaitExpr {
+		return (ast.AwaitExpr){expr: self.expr(awaitExpr.expr)};
+	};
+	func funcExpr(self: *Copier, funcExpr: ast.FuncExpr) ast.FuncExpr {
+		return (ast.FuncExpr){type: new ast.FuncType(self.funcType(*funcExpr.type)), body: self.block(funcExpr.body)};
+	};
+	func genCall(self: *Copier, genCall: ast.GenCall) ast.GenCall {
+		return (ast.GenCall){expr: self.expr(genCall.expr), types: self.typeVec(genCall.types), index: genCall.index};
+	};
+	func type(self: *Copier, type: *ast.Type) *ast.Type {
+		t := self.typeNode(type);
+
+		switch t.type {
+		case ast.TypeType.EXPR:
+			t.data.expr = self.basicExprType(type.data.expr);
+			break;
+		case ast.TypeType.FUNC:
+			t.data.fnc = self.funcType(type.data.fnc);
+			break;
+		case ast.TypeType.CONST:
+			t.data.cnst = self.constType(type.data.cnst);
+			break;
+		case ast.TypeType.POINTER:
+			t.data.pointer = self.pointerType(type.data.pointer);
+			break;
+		case ast.TypeType.STRUCT:
+			t.data.strct = self.strct(type.data.strct);
+			break;
+		default:
+			break;
+		}
+		return t;
+	};
+	func typeVec(self: *Copier, types: *void) vec *ast.Type {
+		typeVec := cast(vec *ast.Type)types;
+		t := (vec *ast.Type){};
+
+		for i := 0; i < typeVec.length; ++i {
+			t.push(self.type(typeVec[i]));
+		}
+		return t;
+	};
+	func basicExprType(self: *Copier, basic: ast.BasicExprType) ast.BasicExprType {
+		return (ast.BasicExprType){expr: self.expr(basic.expr)};
+	};
+	func funcType(self: *Copier, fnc: ast.FuncType) ast.FuncType {
+		return (ast.FuncType){type: fnc.type, returnType: fnc.returnType != null ? self.type(fnc.returnType) : null, args: (ast.Args){names: fnc.args.names, types: self.typeVec(fnc.args.types)}};
+	};
+	func constType(self: *Copier, cnst: ast.ConstType) ast.ConstType {
+		return (ast.ConstType){base: self.type(cnst.base)};
+	};
+	func pointerType(self: *Copier, pointer: ast.PointerType) ast.PointerType {
+		return (ast.PointerType){base: self.type(pointer.base)};
+	};
+	func strct(self: *Copier, strct: ast.StructType) ast.StructType {
+		return (ast.StructType){props: (ast.StructPropSOA){idents: self.exprVec(strct.props.idents), types: self.typeVec(strct.props.types)}, superStructs: self.exprVec(strct.superStructs)};
+	};
+	func pattern(self: *Copier, pattern: *ast.Pattern) *ast.Pattern {
+		return pattern;
+	};
+};
+
+export func copyExpr(expr: *ast.Expr) *ast.Expr {
+	c := (Copier){};
+	return c.expr(expr);
+};
+export func copyType(type: *ast.Type) *ast.Type {
+	c := (Copier){};
+	return c.type(type);
+};

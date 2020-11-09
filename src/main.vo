@@ -7,47 +7,33 @@ import "compiler/parser.vo";
 import "compiler/analyzer.vo";
 import "compiler/compiler.vo";
 
-func main() i32 {
-	
+func print(v: *void, str: *i8, len: u32){
+	// io.println("\n_______Chunk recieved_______\n");
+	io.printn(str, len);
+	// io.println("\n_____________end____________\n");
+};
+
+func main() i32 {	
 	fp: *$FILE = $fopen("./test.vo", "r");
 
 	if fp == null {
 		io.println("fp is null");
 		return 1;
 	}
-
+	
 	stuff := (vec i8){};
 
 	for c: i32 = $fgetc(fp); c != $EOF; c = $fgetc(fp) {
 		stuff.push(cast(i8)c);
 	}
 	stuff.push(0);
-	// io.println(cast(*i8)stuff.raw);
+	$fclose(fp);
 	
 	p := parser.NewParser((lexer.Lexer){buff: stuff.raw});
 	a := analyzer.NewAnalyzer();
-	c := compiler.NewCompiler(0);
+	c := compiler.NewCompiler(0, print, null);
 	
-	// fp2: *$FILE = $fopen("./src/compiler/parser2.vo", "w");
-	c.append("#include \"internal/default.h\"\n", 30);
-	p.eat();
-	
-	stmts := (vec *ast.Stmt){};
+	c.file(a.file(p.file()));
 
-	for tok := p.peek(); tok.pType != tokens.PTokenType.EOF; tok = p.peek() {
-		stmt := p.globalStmt();
-		a.globalStmt(stmt);
-		stmts.push(stmt);
-	}
-	for i := 0; i < stmts.length; ++i {
-		c.stmt(stmts[i]);
-	}
-	// c.buff.append("\nint main(){ return test(); }", 29);
-	c.buff.push(0);
-	io.println(c.buff.raw);
-
-	$fclose(fp);
-	// $fclose(fp2);
-	
 	return 0;
 };

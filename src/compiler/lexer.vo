@@ -42,6 +42,7 @@ export struct Lexer {
 	func error(self: *Lexer, msg: *i8) {
 		io.print("Error: ");
 		io.println(msg);
+		$exit(1);
 	};
 	func assert(self: *Lexer, cond: bool, msg: *i8){
 		if cond {
@@ -127,6 +128,8 @@ export struct Lexer {
 			return tok;
 		} else if util.isStringDelimiter(c) {
 			self.string(&tok);
+		} else if c == '`' {
+			self.string2(&tok);
 		} else if util.isCharDelimiter(c) {
 			self.char(&tok);
 		} else if c == '0' {
@@ -202,6 +205,32 @@ export struct Lexer {
 		char = self.peek();
 		goto loop;
 	};
+	func string2(self: *Lexer, tok: *tokens.Token) {
+		self.eat();
+
+		tok.len = 0;
+		tok.buff++;
+		tok.pType = tokens.PTokenType.STR_LIT2;
+		
+		char := self.peek();
+
+	label loop:
+		if char == '`' {
+			self.eat();
+			return;
+		} else if char == 0 {
+			self.error("expected string delimiter, got eof.");
+		} else if char == '\n' {
+			self.error("expected string delimiter, got end of line.");
+		} else if char == '\\' {
+			tok.len += self.escapeSequence();
+		} else {
+			self.eat();
+			tok.len++;
+		}
+		char = self.peek();
+		goto loop;
+	};
 	func char(self: *Lexer, tok: *tokens.Token) {
 		self.eat();
 
@@ -258,9 +287,15 @@ export struct Lexer {
 		if i := util.findKeyword(tok.buff, tok.len); i != tokens.KeywordsNum {
 			tok.pType = tokens.PTokenType.KEYWORD;
 			tok.sType = cast(tokens.STokenType)i;
-		} else {
-			tok.pType = tokens.PTokenType.IDENT;
+			return;
 		}
+		if i := util.findType(tok.buff, tok.len); i != tokens.TypesNum {
+			tok.pType = tokens.PTokenType.TYPE;
+			tok.sType = cast(tokens.STokenType)(cast(u16)tokens.STokenType.TYPE_START + i);
+			return;
+		}
+
+		tok.pType = tokens.PTokenType.IDENT;
 	};
 	func numBi(self: *Lexer) {
 		for c := self.peek(); util.isNumBi(c); c = self.peek() {

@@ -16,6 +16,7 @@ struct NodeSOA {
     idents: BufSOA;
     types:  vec *ast.Type;
 };
+
 func NewNodeSOA() NodeSOA {
     return (NodeSOA){
         idents: NewBufSOA(),

@@ -53,28 +53,180 @@ func NewTypeContext() TypeContext {
 };
 
 struct CompilerContext {
-	num: u32;
+	num:    u32;
 	mcases: vec *ast.Pattern;
-
+	stack:  vec *ast.Stmt;
+	
 	func free(self: *CompilerContext){
 		self.mcases.free();
+		self.stack.free();
 	};
 	func reset(self: *CompilerContext){
 		self.num = 0;
 		self.mcases.length = 0;
+		self.stack.length  = 0;
 	};
 };
 func NewCompilerContext() CompilerContext {
 	return (CompilerContext){
-		num: 0,
-		mcases: (vec *ast.Pattern){}
+		num:    0,
+		mcases: (vec *ast.Pattern){},
+		stack:  (vec ast.StmtType){},
 	};
+};
+
+typedef BuffCb func(*void, *i8, u32);
+
+struct Buff {
+	raw: [0x100]i8;
+	length: u32;
+
+	cb:   func(*void, *i8, u32);
+	data: *void;
+
+	func push(self: *Buff, chr: i8){
+		if self.length != 0x100 {
+			self.raw[self.length++] = chr;
+		} else {
+			self.flush();
+			self.raw[0] = chr;
+			self.length = 1;
+		}
+	};
+	func append(self: *Buff, str: *i8, len: u32){
+		// io.println("here");
+
+		/*
+		for i := 0; i < len; ++i {
+			self.push(str[i]);
+		}
+		return;
+		*/
+			
+		m: *i64;
+		s: *i64 = cast(*i64)str;
+		
+		if self.length + len < 0x100 {
+			m = cast(*i64)(self.raw + self.length);
+			goto next;
+		}
+		self.checkNFlush();
+
+		m = cast(*i64)self.raw;
+		turns := len / 0x100;
+
+		for i := 0; i < turns; ++i {
+			m[0x00] = s[0x00];
+			m[0x01] = s[0x01];
+			m[0x02] = s[0x02];
+			m[0x03] = s[0x03];
+			m[0x04] = s[0x04];
+			m[0x05] = s[0x05];
+			m[0x06] = s[0x06];
+			m[0x07] = s[0x07];
+			m[0x08] = s[0x08];
+			m[0x09] = s[0x09];
+			m[0x0A] = s[0x0A];
+			m[0x0B] = s[0x0B];
+			m[0x0C] = s[0x0C];
+			m[0x0D] = s[0x0D];
+			m[0x0E] = s[0x0E];
+			m[0x0F] = s[0x0F];
+
+			m[0x10] = s[0x10];
+			m[0x11] = s[0x11];
+			m[0x12] = s[0x12];
+			m[0x13] = s[0x13];
+			m[0x14] = s[0x14];
+			m[0x15] = s[0x15];
+			m[0x16] = s[0x16];
+			m[0x17] = s[0x17];
+			m[0x18] = s[0x18];
+			m[0x19] = s[0x19];
+			m[0x1A] = s[0x1A];
+			m[0x1B] = s[0x1B];
+			m[0x1C] = s[0x1C];
+			m[0x1D] = s[0x1D];
+			m[0x1E] = s[0x1E];
+			m[0x1F] = s[0x1F];
+
+			s += 0x20;
+			self.flush();
+		}
+
+	label next:
+		extras := len % 0x100;
+		
+		switch extras / 8 {
+		case 0x1F: *m++ = *s++;
+		case 0x1E: *m++ = *s++;
+		case 0x1D: *m++ = *s++;
+		case 0x1C: *m++ = *s++;
+		case 0x1B: *m++ = *s++;
+		case 0x1A: *m++ = *s++;
+		case 0x19: *m++ = *s++;
+		case 0x18: *m++ = *s++;
+		case 0x17: *m++ = *s++;
+		case 0x16: *m++ = *s++;
+		case 0x15: *m++ = *s++;
+		case 0x14: *m++ = *s++;
+		case 0x13: *m++ = *s++;
+		case 0x12: *m++ = *s++;
+		case 0x11: *m++ = *s++;
+		case 0x10: *m++ = *s++;
+
+		case 0x0F: *m++ = *s++;
+		case 0x0E: *m++ = *s++;
+		case 0x0D: *m++ = *s++;
+		case 0x0C: *m++ = *s++;
+		case 0x0B: *m++ = *s++;
+		case 0x0A: *m++ = *s++;
+		case 0x09: *m++ = *s++;
+		case 0x08: *m++ = *s++;
+		case 0x07: *m++ = *s++;
+		case 0x06: *m++ = *s++;
+		case 0x05: *m++ = *s++;
+		case 0x04: *m++ = *s++;
+		case 0x03: *m++ = *s++;
+		case 0x02: *m++ = *s++;
+		case 0x01: *m++ = *s++;
+		default: break;
+		}
+
+		m2 := cast(*i8)(m);
+		s2 := cast(*i8)(s);
+		
+		switch extras % 8 {
+		case 7: *m2++ = *s2++;
+		case 6: *m2++ = *s2++;
+		case 5: *m2++ = *s2++;
+		case 4: *m2++ = *s2++;
+		case 3: *m2++ = *s2++;
+		case 2: *m2++ = *s2++;
+		case 1: *m2++ = *s2++;
+		default: break;
+		}
+		self.length += extras;
+	};
+	func flush(self: *Buff){
+		c := self.cb;
+		c(self.data, cast(*i8)self.raw, self.length);
+		self.length = 0;
+	};
+	func checkNFlush(self: *Buff){
+		if self.length != 0 {
+			self.flush();
+		}
+	};
+};
+func NewBuff(cb: func(*void, *i8, u32), data: *void) Buff {
+	return (Buff){cb: cb, data: data, length: 0};
 };
 
 export struct Compiler {
 	scopeCount: u32;
-	context: CompilerContext;
-	buff: vec i8;
+	context:    CompilerContext;
+	buff:       Buff;
 
 	func push(self: *Compiler, char: i8){
 		self.buff.push(char);
@@ -146,34 +298,30 @@ export struct Compiler {
 		}
 	};
 	func ident(self: *Compiler, ident: *ast.IdentExpr){
-		/*
-		if p := names.getPrefix(ident.type); p != 0 {
+		if p := names.getPrefix(ident.name.type); p != 0 {
 			self.push(p);
+
+			if names.isIndexed(ident.name.type) {
+				b: [10]i8;
+				self.append(b, num.utos(ident.name.index, b));
+			}
 			self.push('_');
 		}
-		*/
 		self.append(cast(*i8)ident.tok.buff, ident.tok.len);
 	};
 	func operator(self: *Compiler, op: *ast.Operator){
 		self.append(cast(*i8)op.tok.buff, op.tok.len);
 	};
 	func basicLit(self: *Compiler, lit: *ast.Expr){
-		/*
-		switch lit.data.pType {
-		case tokens.PTokenType.NUM_LIT:
-			self.numberLit(lit.buff, lit.len);
-			break;
-		case tokens.PTokenType.CHR_LIT:
-			self.charLit(lit.buff, lit.len);
-			break;
-		case tokens.PTokenType.STR_LIT:
-			self.strLit(lit.buff, lit.len);
-			break;
-		default:
-			break;
-		}
-		*/
 		self.append(cast(*i8)lit.buff, lit.len);
+	};
+	func file(self: *Compiler, file: ast.File) {
+		self.append("#include \"internal/default.h\"\n", 30);
+	
+		for i := 0; i < file.stmts.length; ++i {
+			self.stmt(file.stmts[i]);
+		}
+		self.buff.checkNFlush();
 	};
 	func stmt(self: *Compiler, stmt: *ast.Stmt){
 		self.newline();
@@ -204,6 +352,11 @@ export struct Compiler {
 		case ast.StmtType.MATCH:
 			self.mtch(stmt.data.mtch);
 			break;
+		case ast.StmtType.GENERIC:
+			self.context.stack.push(stmt);
+			self.genric(stmt.data.genric);
+			self.context.stack.pop();
+			break;
 		case ast.StmtType.LOOP:
 			self.loop(stmt.data.loop);
 			break;
@@ -228,6 +381,9 @@ export struct Compiler {
 		case ast.StmtType.SCASE:
 			self.switchCase(stmt.data.scase);
 			break;
+		case ast.StmtType.GCASE:
+			self.genericCase(stmt.data.gcase);
+			break;
 		case ast.StmtType.MCASE:
 			self.matchCase(stmt.data.mcase);
 			break;
@@ -243,15 +399,33 @@ export struct Compiler {
 		case ast.StmtType.TEMPLATE:
 			self.tmplate(stmt.data.tmplate);
 			break;
+		case ast.StmtType.__C:
+			self.___c(stmt.data.___c);
+			break;
 		default:
 			break;
 		}
 	};
+	func ___c(self: *Compiler, ___c: ast.__C){
+		for i := 0; i < ___c.stuff.length; ++i {
+			self.expr(___c.stuff[i]);
+		}
+	};
 	func defalt(self: *Compiler){
-		self.append("default:", 8);
+		s := self.context.stack[self.context.stack.length-1];
+		if s.type == ast.StmtType.GENERIC {
+			self.append("il_in:", 6);
+		} else {
+			self.append("default:", 8);
+		}
 	};
 	func brak(self: *Compiler){
-		self.append("break", 5);
+		s := self.context.stack[self.context.stack.length-1];
+		if s.type == ast.StmtType.GENERIC {
+			self.append("goto il_out", 11);
+		} else {
+			self.append("break", 5);
+		}
 	};
 	func continuee(self: *Compiler){
 		self.append("continue", 8);
@@ -267,6 +441,9 @@ export struct Compiler {
 		self.append(s, num.utos(self.context.num++, s));
 		self.colon();
 		self.context.mcases.push(mcase.val);
+	};
+	func genericCase(self: *Compiler, gcase: ast.GenericCase){
+		self.append("il_in:", 6);
 	};
 	func del(self: *Compiler, del: ast.Delete){
 		self.append("free(", 5);
@@ -292,64 +469,91 @@ export struct Compiler {
 			return;
 		}
 		i := 0;
+		
+		b := ([5]*i8){"", "static ", "extern ", "extern ", "register "}[dec.sClass];
+		l := ([5]size_t){0, 7, 7, 7, 9}[dec.sClass];
+		
+		if dec.sClass != ast.StorageClass.C_EXTERN {
+			goto body2;
+			for ; i < dec.idents.length; ++i {
+				self.semicolon();
+				self.newline();
+				self.indent();
 
-		goto body;
-		for ; i < dec.idents.length; ++i {
-			self.semicolon();
-			self.newline();
-			self.indent();
+			label body2:
+				self.append(b, l);
+				self.decType(dec.types[i], dec.idents[i]);
+				self.space();
+				self.equal();
+				self.space();
+				self.expr(dec.values[i]);
+			}
+		} else {
+			goto body1;
+			for ; i < dec.idents.length; ++i {
+				self.semicolon();
+				self.newline();
+				self.indent();
 
-		label body:
-			self.decType(dec.types[i], dec.idents[i]);
-			self.space();
-			self.equal();
-			self.space();
-			self.expr(dec.values[i]);
+			label body1:
+				self.append("#define ", 8);
+				self.expr(dec.idents[i]);
+				self.space();
+				self.append(dec.idents[i].buff, dec.idents[i].len);
+				self.newline();
+				self.indent();
+				self.append(b, l);
+				self.decType(dec.types[i], dec.idents[i]);
+				self.space();
+				self.equal();
+				self.space();
+				self.expr(dec.values[i]);
+			}
 		}
 	};
 	func decNoVal(self: *Compiler, dec: ast.Declaration){
-		self.decType(dec.types[0], dec.idents[0]);
+		i := 0;
 
-		for i := 1; i < dec.idents.length; ++i {
-			self.semicolon();
-			self.newline();
-			self.indent();
-			self.decType(dec.types[i], dec.idents[i]);
-		}
-	};
-	func funcDec(self: *Compiler, dec: ast.FuncDec){
-		if dec.type.type == ast.FuncTypeEnum.ORD {
-			self.funcDecOrd(dec);
-		} else if dec.type.type == ast.FuncTypeEnum.NATIVE {
-			self.funcDecNative(dec);
-		}
-	};
-	func funcDecOrd(self: *Compiler, dec: ast.FuncDec){
-		self.funcDecType(dec.type, dec.name);
-		self.space();
-		self.equal();
-		self.space();
-
-		t := dec.type;
-		self.push('^');
-		self.space();
-		self.type(t.returnType);
+		b := ([5]*i8){"", "static ", "extern ", "extern ", "register "}[dec.sClass];
+		l := ([5]size_t){0, 7, 7, 7, 9}[dec.sClass];
 		
-		self.openParen();
-		if t.args.types.length != 0 {
-			self.decTypeIdent(t.args.types[0], &t.args.names[0]);
-			for i := 1; i < t.args.types.length; ++i {
-				self.comma();
+		if dec.sClass != ast.StorageClass.C_EXTERN {
+			goto body2;
+			for ; i < dec.idents.length; ++i {
+				self.semicolon();
+				self.newline();
+				self.indent();
+
+			label body2:
+				self.append(b, l);
+				self.decType(dec.types[i], dec.idents[i]);
+			}
+		} else {
+			goto body1;
+			for ; i < dec.idents.length; ++i {
+				self.semicolon();
+				self.newline();
+				self.indent();
+
+			label body1:
+				self.append("#define ", 8);
+				self.expr(dec.idents[i]);
 				self.space();
-				self.decTypeIdent(t.args.types[i], &t.args.names[i]);
+				self.append(dec.idents[i].buff, dec.idents[i].len);
+				self.space();
+				self.newline();
+				self.indent();
+				self.append(b, l);
+				self.decType(dec.types[i], dec.idents[i]);
 			}
 		}
-		self.closeParen();
-		self.block(dec.body);
 	};
-	func funcDecNative(self: *Compiler, dec: ast.FuncDec){
+	func funcDecNoBlock(self: *Compiler, dec: ast.FuncDec){
 		self.funcDecType(dec.type, dec.name);
-		self.block(dec.body);
+	};
+	func funcDec(self: *Compiler, dec: ast.FuncDec){
+		self.funcDecNoBlock(dec);
+		self.funcBody(dec.body, dec.type);
 	};
 	func block(self: *Compiler, block: ast.Block){
 		self.openCBrace();
@@ -363,18 +567,23 @@ export struct Compiler {
 		self.closeCBrace();
 	};
 	func assign(self: *Compiler, assign: ast.Assignment){
-		for i := 0; i < assign.vars.length; ++i {
+		self.expr(assign.vars[0]);
+		self.operator(assign.op);
+		self.expr(assign.vals[0]);
+		
+		for i := 1; i < assign.vars.length; ++i {
+			self.semicolon();
+			self.newline();
 			self.expr(assign.vars[i]);
 			self.operator(assign.op);
 			self.expr(assign.vals[i]);
-			self.semicolon();
-			self.newline();
 		}
 	};
 	func rturn(self: *Compiler, rturn: ast.Return){
-		self.append("return", 6);
-		self.space();
+		self.append("RETURN", 6);
+		self.openParen();
 		self.expr(rturn.val);
+		self.closeParen();
 	};
 	func ifElse(self: *Compiler, ifElse: ast.IfElse){
 		c := 0;
@@ -396,14 +605,11 @@ export struct Compiler {
 			self.closeParen();
 			self.block(block);
 			self.space();
-			self.append("else ", 5);
+			self.append("else", 4);
 		}
-		
 		if ifElse.elseBlock.stmts != null {
 			self.block(ifElse.elseBlock);
 		}
-		self.semicolon();
-
 		for c-- != 0 {
 			self.popScope();
 			self.newline();
@@ -434,6 +640,35 @@ export struct Compiler {
 			self.closeParen();
 			self.block(swtch.block);
 		}
+	};
+	func genric(self: *Compiler, genric: ast.Generic){
+		self.openCBrace();
+		self.pushScope();
+		
+		self.newline();
+		self.indent();
+		
+		first := genric.block.stmts[genric.start];
+		self.append("__label__ il_in, il_out;", 24);
+		
+		if first.type != ast.StmtType.GCASE && first.type != ast.StmtType.DEFAULT {
+			self.newline();
+			self.indent();
+			self.append("goto il_in;", 11);
+		}
+		// $printf("c: %i, %i\n", genric.start, genric.end);	
+		
+		for i := genric.start; i < genric.end; ++i {
+			self.stmt(genric.block.stmts[i]);
+		}
+
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.append("il_out:;", 8);
+		self.newline();
+		self.indent();
+		self.closeCBrace();
 	};
 	func loop(self: *Compiler, loop: ast.Loop){
 		c: bool = loop.initStmt != null;
@@ -476,8 +711,18 @@ export struct Compiler {
 			self.indent();
 		}
 
-		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
+		b := (vec i8){};
+
+		cb := func (d: *void, str: *i8, len: u32){ 
+			b.append(str, len); 
+		};
+		c := (Compiler){
+			scopeCount: self.scopeCount,
+			buff: NewBuff(cb, null),
+			context: NewCompilerContext()
+		};
 		c.block(mtch.block);
+		c.buff.checkNFlush();
 
 		self.append("register int i_s = -1;", 22);
 		self.newline();
@@ -513,14 +758,13 @@ export struct Compiler {
 		self.indent();
 
 		self.append("switch(i_s)", 11);
-		self.append(c.buff.raw, c.buff.length);
+		self.append(b.raw, b.length);
+		b.free();
 
 		self.popScope();
 		self.newline();
 		self.indent();
 		self.closeCBrace();
-
-		c.free();
 	};
 	func labl(self: *Compiler, labl: ast.Label){
 		self.ident(labl.name);
@@ -535,57 +779,36 @@ export struct Compiler {
 		self.decTypeIdent(tdef.type, tdef.name);
 	};
 	func tmplate(self: *Compiler, tmplate: ast.Template){
-		buff: [20]i8 = {'g'};
-		arg: vec *ast.Type;
-		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
+		buff: [10]i8 = {'g'};
 		
-		for i: u32 = 0; i < tmplate.type.args.length; ++i {
-			arg = tmplate.type.args[i];
-				
+		c := (Compiler){
+			scopeCount: self.scopeCount, 
+			buff: NewBuff(cast(BuffCb)self.macroAppend, self), 
+			context: NewCompilerContext()
+		};
+		
+		for i: u32 = 0; i < tmplate.type.datas.length; ++i {
+			x := tmplate.type.datas[i];
+			arg := tmplate.type.args[i];
+
 			for j := 0; j < tmplate.type.params.length; ++j {
 				c.append("#define ", 8);
 				c.ident(&tmplate.type.params[j]);
 				c.space();
 				c.type(arg[j]);
 
-				self.macroAppend(c.buff.raw, c.buff.length);
-				self.newline();
 				c.reset();
+				self.newline();
 			}
-			if cast(u32)tmplate.type.data.type == cast(u32)ast.TypeExprEnum.TYPE { // bog
-				self.append("typedef ", 8);
-				self.decTypeIdentNBuff(cast(*ast.Type)tmplate.type.data.data.type, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
-				goto next2;
-			}
-			self.decTypeIdentNBuff(&(ast.Type){
-				data: (ast.TypeUnion){fnc: *(cast(*ast.Expr)tmplate.type.data.data.expr).data.funcExpr.type},
-				type: ast.TypeType.FUNC
-			}, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
 			
-			self.space();
-			self.equal();
-			self.space();
-
-			t := *cast(*ast.FuncType)(cast(*ast.Expr)tmplate.type.data.data.expr).data.funcExpr.type;
-			self.push('^');
-			self.space();
-			self.type(t.returnType);
-			self.openParen();
-
-			if t.args.types.length == 0 {
-				goto next;
+			if cast(u32)tmplate.type.type == cast(u32)ast.TypeExprEnum.TYPE { // bog
+				self.append("typedef ", 8);
+				self.decTypeIdentNBuff(cast(*ast.Type)x.type, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
+			} else {
+				self.decTypeIdentNBuff(&(ast.Type){data: (ast.TypeUnion){fnc: *(cast(*ast.Expr)x.expr).data.funcExpr.type}, type: ast.TypeType.FUNC}, tmplate.name, buff, num.utos(i, cast(*i8)buff+1)+1);
+				self.block((cast(*ast.Expr)x.expr).data.funcExpr.body);
 			}
-			self.decTypeIdent(t.args.types[0], &t.args.names[0]);
-			for i := 1; i < t.args.types.length; ++i {
-				self.comma();
-				self.space();
-				self.decTypeIdent(t.args.types[i], &t.args.names[i]);
-			}
-		label next:
-			self.closeParen();
-			self.block((cast(*ast.Expr)tmplate.type.data.data.expr).data.funcExpr.body);
 
-		label next2:
 			self.semicolon();
 			for j := 0; j < tmplate.type.params.length; ++j {
 				self.newline();
@@ -594,11 +817,17 @@ export struct Compiler {
 			}
 			self.newline();
 		}
-		c.free();
 	};
 	func expr(self: *Compiler, expr: *ast.Expr){
 		switch expr.type {
 		case ast.ExprType.IDENT:
+			self.push(names.getPrefix(expr.data.name.type));
+		
+			if names.isIndexed(expr.data.name.type) {
+				b: [10]i8;
+				self.append(b, num.utos(expr.data.name.index, b));
+			}
+			self.push('_');
 			self.append(cast(*i8)expr.buff, expr.len);
 			break;
 		case ast.ExprType.UNARY:
@@ -638,14 +867,6 @@ export struct Compiler {
 			self.expr(expr.data.ternary.right);
 			self.closeParen();
 			break;
-		case ast.ExprType.CALL:
-			self.openParen();
-			self.expr(expr.data.callExpr.function);
-			self.closeParen();
-			self.openParen();
-			self.exprVec(expr.data.callExpr.args);
-			self.closeParen();
-			break;
 		case ast.ExprType.CAST:
 			self.openParen();
 			self.type(expr.data.castExpr.type);
@@ -653,9 +874,6 @@ export struct Compiler {
 			self.openParen();
 			self.expr(expr.data.castExpr.expr);
 			self.closeParen();
-			break;
-		case ast.ExprType.MEMBER:
-			self.memberExpr(expr);
 			break;
 		case ast.ExprType.ELEMENT:
 			self.openParen();
@@ -669,6 +887,12 @@ export struct Compiler {
 			self.append("sizeof(", 7);
 			self.expr(expr.data.sizeExpr.expr);
 			self.closeParen();
+			break;
+		case ast.ExprType.CALL:
+			self.callExpr(expr.data.callExpr);
+			break;
+		case ast.ExprType.MEMBER:
+			self.memberExpr(expr);
 			break;
 		case ast.ExprType.NEW:
 			self.newExpr(expr.data.newExpr);
@@ -685,8 +909,17 @@ export struct Compiler {
 		case ast.ExprType.FUNC:
 			self.funcExpr(expr.data.funcExpr);
 			break;
+		case ast.ExprType.SWITCH:
+			self.swtchExpr(expr.data.swtch);
+			break;
+		case ast.ExprType.MATCH:
+			self.mtchExpr(expr.data.mtch);
+			break;
+		case ast.ExprType.GENERIC:
+			self.genricExpr(expr.data.genric);
+			break;
 		case ast.ExprType.GENCALL: {
-			buff: [20]i8;
+			buff: [10]i8;
 			self.push('g');
 			self.append(buff, num.utos(cast(u32)expr.data.genCall.index, buff));
 			self.push('_');
@@ -751,16 +984,69 @@ export struct Compiler {
 		self.closeCBrace();
 		self.closeParen();
 	};
-	func memberExpr(self: *Compiler, expr: *ast.Expr){
+	func callExpr(self: *Compiler, call: ast.CallExpr){
 		self.openParen();
-		self.expr(expr.data.member.base);
+		self.expr(call.function);
 		self.closeParen();
+		self.openParen();
+		
+		t := *cast(*ast.FuncType)(&call.function.eType.data.fnc);
+		
+		if call.args == null || call.args.length == 0 {
+			self.closeParen();
+			return;
+		}
+		i := 0;
 
-		if (cast(*ast.Expr)(expr.data.member.base)).eType.type == ast.TypeType.POINTER {
-			self.push('-');
-			self.push('>');
+		if t.args.types.length == 0 {
+			goto next;	
 		} else {
-			self.dot();
+			goto body;
+		}
+		
+		for ; i < t.args.types.length; ++i {
+			self.comma();
+			self.space();
+		label body:
+			self.expr(call.args[i]);
+		}
+		
+		if i < call.args.length {
+			b: [10]i8;
+
+			self.comma();
+			self.space();
+		label next:
+			self.append(b, num.utos(call.args.length - i, b));
+		}
+		
+		for ; i < call.args.length; ++i {
+			self.comma();
+			self.space();
+			self.expr(call.args[i]);
+		}
+		self.closeParen();
+	};
+	func memberExpr(self: *Compiler, expr: *ast.Expr){
+		switch expr.eType.type {
+		case ast.TypeType.TEMPLATE:
+			break;
+		case ast.TypeType.FUNC:
+			if cast(ast.FuncTypeEnum)expr.eType.data.fnc.type == ast.FuncTypeEnum.NATIVE {
+				break;
+			}
+		default:
+			self.openParen();
+			self.expr(expr.data.member.base);
+			self.closeParen();
+
+			if (cast(*ast.Expr)(expr.data.member.base)).eType.type == ast.TypeType.POINTER {
+				self.push('-');
+				self.push('>');
+			} else {
+				self.dot();
+			}
+			break;
 		}
 		self.ident(expr.data.member.prop);
 	};
@@ -775,20 +1061,245 @@ export struct Compiler {
 	func funcExpr(self: *Compiler, fnc: ast.FuncExpr){
 		self.push('^');
 		self.space();
-		self.type(fnc.type.returnType);
+
+		if fnc.type.returnType != null {
+			self.type(fnc.type.returnType);
+		} else {
+			self.append("void", 4);
+		}
 		self.openParen();
 
 		if fnc.type.args.types.length != 0 {
-			self.decTypeIdent(fnc.type.args.types[0], &fnc.type.args.names[0]);
-			
-			for i := 1; i < fnc.type.args.types.length; ++i {
-				self.comma();
-				self.space();
-				self.decTypeIdent(fnc.type.args.types[i], &fnc.type.args.names[i]);
-			}
+			goto end;
 		}
+		self.decTypeIdent(fnc.type.args.types[0], &fnc.type.args.names[0]);
+		for i := 1; i < fnc.type.args.types.length; ++i {
+			self.comma();
+			self.space();
+			self.decTypeIdent(fnc.type.args.types[i], &fnc.type.args.names[i]);
+		}
+	label end:
 		self.closeParen();
-		self.block(fnc.body);
+		self.funcBody(fnc.body, *fnc.type);
+	};
+	func funcBody(self: *Compiler, body: ast.Block, type: ast.FuncType){
+		self.openCBrace();
+		self.pushScope();
+		
+		if type.varargs != null {
+			self.newline();
+			self.indent();
+			self.append("v0__Arguments ", 14);
+			self.ident(type.varargs);
+			self.append(" = (v0__Arguments){.p_length = i_lll};", 38);
+			self.newline();
+			self.indent();
+			self.append("va_start(", 9);
+			self.ident(type.varargs);
+			self.append(".p_list, i_lll);", 16);
+			self.newline();
+			self.indent();
+			self.append("#undef RETURN", 13);
+			self.newline();
+			self.indent();
+			self.append("#define RETURN(expr) va_end(", 28);
+			self.ident(type.varargs);
+			self.append(".p_list); return expr", 21);
+		} else {
+			self.newline();
+			self.indent();
+			self.append("#undef RETURN", 13);
+			self.newline();
+			self.indent();
+			self.append("#define RETURN(expr) return expr", 32);
+		}
+		for i := 0; i < body.stmts.length; ++i {
+			self.stmt(body.stmts[i]);
+		}
+		if type.varargs != null {
+			self.newline();
+			self.indent();
+			self.append("va_end(", 7);
+			self.ident(type.varargs);
+			self.append(".p_list);", 9);
+		}
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.append("#undef RETURN", 13);
+		self.newline();
+		self.indent();
+		self.append("#define RETURN(expr) return expr", 32);
+		self.indent();
+		self.newline();
+		self.closeCBrace();
+	};
+	func swtchExpr(self: *Compiler, swtch: ast.SwitchExpr){
+		self.openParen();
+		self.openCBrace();
+		self.pushScope();
+		self.newline();
+		self.indent();
+
+		if swtch.initStmt != null {
+			self.stmt(swtch.initStmt);
+			self.newline();
+			self.indent();
+		}
+
+		self.append("register typeof", 15);
+		self.openParen();
+		self.expr(swtch.defalt);
+		self.closeParen();
+		self.space();
+		self.append("i_v", 3);
+		self.semicolon();
+		self.newline();
+		self.indent();
+		
+		self.append("switch", 6);
+		self.openParen();
+		self.expr(swtch.expr);
+		self.closeParen();
+		
+		self.openCBrace();
+		self.pushScope();
+
+		for i := 0; i < swtch.conds.length; ++i {
+			self.newline();
+			self.indent();
+			self.append("case ", 5);
+			self.expr(swtch.conds[i]);
+			self.colon();
+			self.space();
+			self.append("i_v = ", 6);
+			self.expr(swtch.vals[i]);
+			self.semicolon();
+			self.append(" break;", 7);
+		}
+		self.newline();
+		self.indent();
+		self.append("default: ", 9);
+		self.append("i_v = ", 6);
+		self.expr(swtch.defalt);
+		self.semicolon();
+		self.append(" break;", 7);
+		
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+
+		self.newline();
+		self.indent();
+		self.append("i_v;", 4);
+		
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+		self.closeParen();
+	};
+	func mtchExpr(self: *Compiler, mtch: ast.MatchExpr){
+		self.openParen();
+		self.openCBrace();
+		self.pushScope();
+		self.newline();
+		self.indent();
+		
+		if mtch.initStmt != null {
+			self.stmt(mtch.initStmt);
+			self.newline();
+			self.indent();
+		}
+
+		self.append("register typeof", 15);
+		self.openParen();
+		self.expr(mtch.defalt);
+		self.closeParen();
+		self.space();
+		self.append("i_q", 3);
+		self.semicolon();
+		self.newline();
+		self.indent();
+		
+		self.append("register int i_s = -1;", 22);
+		self.newline();
+		self.indent();
+		self.append("register typeof(", 16);
+		self.expr(mtch.expr);
+		self.append(") i_e = ", 8);
+		self.expr(mtch.expr);
+		self.semicolon();
+
+		self.newline();
+		self.newline();
+		self.indent();
+
+		temp: [10]i8;
+
+		for pattern, i := mtch.conds[0], cast(u32)0; i < mtch.conds.length; pattern = mtch.conds[++i] {
+			self.append("if(", 3);
+			self.pattern(pattern, "i_e", 3);
+			self.closeParen();
+			self.space();
+			self.append("i_s = ", 6);
+			self.append(cast(*i8)temp, num.utos(i, temp));
+			self.semicolon();
+			self.newline();
+			self.indent();
+			self.append("else ", 5);
+		}
+
+		self.semicolon();
+		self.newline();
+		self.newline();
+		self.indent();
+		self.append("switch(i_s)", 11);
+		self.openCBrace();
+		self.pushScope();
+
+		for i := 0; i < mtch.conds.length; ++i {
+			self.newline();
+			self.indent();
+			self.append("case ", 5);
+			self.append(cast(*i8)temp, num.utos(i, temp));
+			self.colon();
+			self.space();
+			self.append("i_q = ", 6);
+			self.expr(mtch.vals[i]);
+			self.semicolon();
+			self.append(" break;", 7);
+		}
+		self.newline();
+		self.indent();
+		self.append("default: ", 9);
+		self.append("i_q = ", 6);
+		self.expr(mtch.defalt);
+		self.semicolon();
+		self.append(" break;", 7);
+		
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+
+		self.newline();
+		self.indent();
+		self.append("i_q;", 4);
+		
+		self.popScope();
+		self.newline();
+		self.indent();
+		self.closeCBrace();
+		self.closeParen();
+	};
+	func genricExpr(self: *Compiler, genric: ast.GenericExpr){
+		if genric.index == genric.conds.length {
+			self.expr(genric.defalt);
+		} else {
+			self.expr(genric.vals[genric.index]);
+		}
 	};
 	func exprVec(self: *Compiler, e: *void){
 		exprs: vec *ast.Expr = e;
@@ -831,7 +1342,6 @@ export struct Compiler {
 		self.push('_');
 		self.expr(expr);
 		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
-		
 		ctx.buf.free();
 	};
 	func decTypeIdent(self: *Compiler, type: *ast.Type, ident: *ast.IdentExpr){
@@ -841,7 +1351,6 @@ export struct Compiler {
 		self.append(ctx.buf.raw, ctx.bottom);
 		self.ident(ident);
 		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
-
 		ctx.buf.free();
 	};
 	func decTypeIdentNBuff(self: *Compiler, type: *ast.Type, ident: *ast.IdentExpr, buff: *i8, len: size_t){
@@ -853,17 +1362,20 @@ export struct Compiler {
 		self.push('_');
 		self.ident(ident);
 		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
-
 		ctx.buf.free();
 	};
 	func decTypeRaw(self: *Compiler, type: *ast.Type, ctx: *TypeContext){
 		switch type.type {
 		case ast.TypeType.BASIC:
-			self.expr(type.data.basic.expr);
+			self.append(type.buff, type.len);
+			self.space();
+			break;
+		case ast.TypeType.EXPR:
+			self.expr(type.data.expr.expr);
 			self.space();
 			break;
 		case ast.TypeType.GENCALL: {
-			buff: [20]i8;
+			buff: [10]i8;
 			self.push('g');
 			self.append(buff, num.utos(cast(u32)type.data.genCall.index, buff));
 			self.push('_');
@@ -873,10 +1385,6 @@ export struct Compiler {
 		}
 		case ast.TypeType.CONST:
 			self.typeRaw(type.data.cnst.base, ctx);
-			break;
-		case ast.TypeType.STATIC:
-			self.append("static ", 7);
-			self.typeRaw(type.data.statc.base, ctx);
 			break;
 		case ast.TypeType.POINTER:
 			ctx.insert("(*", 2);
@@ -915,11 +1423,15 @@ export struct Compiler {
 	func typeRaw(self: *Compiler, type: *ast.Type, ctx: *TypeContext){
 		switch type.type {
 		case ast.TypeType.BASIC:
-			self.expr(type.data.basic.expr);
+			self.append(type.buff, type.len);
+			self.space();
+			break;
+		case ast.TypeType.EXPR:
+			self.expr(type.data.expr.expr);
 			self.space();
 			break;
 		case ast.TypeType.GENCALL: {
-			buff: [20]i8;
+			buff: [10]i8;
 			self.push('g');
 			self.append(buff, num.utos(cast(u32)type.data.genCall.index, buff));
 			self.push('_');
@@ -930,13 +1442,8 @@ export struct Compiler {
 		case ast.TypeType.CONST:
 			self.typeRaw(type.data.cnst.base, ctx);
 			break;
-		case ast.TypeType.STATIC:
-			self.append("static ", 7);
-			self.typeRaw(type.data.statc.base, ctx);
-			break;
 		case ast.TypeType.POINTER:
 			ctx.insert("*", 1);
-			// ctx.push(')');
 			self.typeRaw(type.data.pointer.base, ctx);
 			break;
 		case ast.TypeType.ARRAY:
@@ -980,7 +1487,7 @@ export struct Compiler {
 		if fnc.type == ast.FuncTypeEnum.ORD {
 			ctx.push(')');
 			ctx.push('(');
-			self.funcTypeArgs(fnc.args, ctx);
+			self.funcTypeArgs(fnc, ctx);
 			ctx.push(')');
 
 			if fnc.returnType == null {
@@ -991,7 +1498,7 @@ export struct Compiler {
 			ctx.insert("(^", 2);
 		} else if fnc.type == ast.FuncTypeEnum.NATIVE {
 			ctx.push('(');
-			self.funcTypeArgs(fnc.args, ctx);
+			self.funcTypeArgs(fnc, ctx);
 			ctx.push(')');
 
 			if fnc.returnType == null {
@@ -1001,18 +1508,34 @@ export struct Compiler {
 			}
 		}
 	};
-	func funcTypeArgs(self: *Compiler, args: ast.Args, ctx: *TypeContext){		
-		if args.types.length == 0 {
-			return;
-		}
-		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
+	func funcTypeArgs(self: *Compiler, fnc: ast.FuncType, ctx: *TypeContext){
+		args := fnc.args;
 
+		c := (Compiler){
+			scopeCount: self.scopeCount,
+			buff: NewBuff(cast(BuffCb)ctx.append, ctx),
+			context: NewCompilerContext()
+		};
+
+		if args.types.length == 0 {
+			if fnc.varargs == null {
+				return;
+			}
+			c.append("i32 i_lll, ...", 14);
+			goto out;
+		}
+		
 		if args.names == null {
 			c.type(args.types[0]);
 			for i := 1; i < args.types.length; ++i {
 				c.comma();
 				c.space();
 				c.type(args.types[i]);
+			}
+			if fnc.varargs != null {
+				c.comma();
+				c.space();
+				c.append("u16, ...", 8);
 			}
 		} else {
 			c.decTypeIdent(args.types[0], &args.names[0]);
@@ -1021,33 +1544,56 @@ export struct Compiler {
 				c.space();
 				c.decTypeIdent(args.types[i], &args.names[i]);
 			}
+			if fnc.varargs != null {
+				c.comma();
+				c.space();
+				c.append("i32 i_lll, ...", 14);
+				c.ident(fnc.varargs);
+			}
 		}
-		ctx.append(c.buff.raw, c.buff.length);
+
+	label out:
 		c.free();
 	};
 	func structType(self: *Compiler, strct: ast.StructType, ctx: *TypeContext){
-		c := (Compiler){scopeCount: self.scopeCount, buff: (vec i8){}, context: NewCompilerContext()};
-
-		self.append("struct {", 8);
+		self.append("struct ", 7);
+		
+		if strct.name != null {
+			self.ident(strct.name);
+			self.space();
+		}
+		self.openCBrace();
 		self.pushScope();
 
-		for i := 0; i < strct.props.length; ++i {
+		for i := 0; i < strct.props.idents.length; ++i {
 			self.newline();
 			self.indent();
-			self.decNoVal(strct.props[i].data.dec);
+			self.decTypeIdent(strct.props.types[i], &strct.props.idents[i]);
 			self.semicolon();
 		}
+
 		self.popScope();
 		self.newline();
 		self.closeCBrace();
-
-		for i := 0; i < strct.methods.length; ++i {
+		
+		c := (Compiler){
+			scopeCount: self.scopeCount,
+			buff: NewBuff(cast(BuffCb)ctx.append, ctx),
+			context: NewCompilerContext()
+		};
+		
+		for i := 0; i < strct.methods.idents.length; ++i {
 			c.semicolon();
 			c.newline();
 			c.indent();
-			c.funcDec(strct.methods[i].data.funcDec);
+			c.funcDec((ast.FuncDec){name: &strct.methods.idents[i], type: strct.methods.types[i].data.fnc, body: strct.methods.blocks[i]});
 		}
-		ctx.append(c.buff.raw, c.buff.length);
+		for i := 0; i < strct.tmplates.idents.length; ++i {
+			c.semicolon();
+			c.newline();
+			c.indent();
+			c.tmplate((ast.Template){name: &strct.tmplates.idents[i], type: strct.tmplates.types[i].data.tmplate});
+		}
 		c.free();
 	};
 	func unionType(self: *Compiler, unon: ast.UnionType){
@@ -1300,18 +1846,18 @@ export struct Compiler {
 		}
 	};
 	func free(self: *Compiler){
-		self.buff.free();
+		self.buff.checkNFlush();
 		self.context.free();
 	};
 	func reset(self: *Compiler){
-		self.buff.length = 0;
+		self.buff.checkNFlush();
 		self.context.reset();
 	};
 };
-export func NewCompiler(scopeCount: u32) Compiler {
+export func NewCompiler(scopeCount: u32, cb: func(*void, *i8, u32), data: *void) Compiler {
 	return (Compiler){
 		scopeCount: scopeCount,
-		buff: (vec i8){},
+		buff:    NewBuff(cb, data),
 		context: NewCompilerContext()
 	};
 };

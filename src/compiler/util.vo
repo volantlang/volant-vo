@@ -45,8 +45,14 @@ func strcomp(a: *i8, b: *i8, l: size_t) bool {
 	return *a == 0 && l == 0;
 };
 
-export func findKeyword(c: *i8, l: size_t) size_t {
-	word, i := tokens.Keywords[0], cast(size_t)1;
+export func findKeyword(c: *i8, l: size_t) u16 {
+	word, i := tokens.Keywords[0], cast(u16)1;
 	for ;i != tokens.KeywordsNum && !strcomp(word, c, l); word = tokens.Keywords[i++] {}
+	return i;
+};
+
+export func findType(c: *i8, l: size_t) u16 {
+	word, i := tokens.Types[0], cast(u16)1;
+	for ;i != tokens.TypesNum && !strcomp(word, c, l); word = tokens.Types[i++] {}
 	return i;
 };

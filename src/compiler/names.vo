@@ -3,6 +3,7 @@ export enum NameType {
     RAW = 0,
     ENUM_PROP,
     STRUCT_PROP,
+    METHOD,
     VAR
 };
 
@@ -15,10 +16,6 @@ export struct NameInfo {
     index: u16;
 };
 
-export func isNamespaced(type: NameType) bool {
-    return type == NameType.VAR;
-};
-
 export func getPrefix(type: NameType) i8 {
     switch type {
     case NameType.ENUM_PROP:
@@ -27,7 +24,13 @@ export func getPrefix(type: NameType) i8 {
         return 'p';
     case NameType.VAR:
         return 'v';
+    case NameType.METHOD:
+        return 'm';
     default:
         return 0;
     }
+};
+
+export func isIndexed(type: NameType) bool {
+    return type == NameType.VAR || type == NameType.METHOD;
 };

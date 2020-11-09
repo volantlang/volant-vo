@@ -11,25 +11,28 @@ export enum ExprType {
 	CAST,
 	AWAIT,
 	IDENT,
+	MATCH,
 	UNARY,
 	PUNARY, // postfix unary
 	SIZEOF,
 	MEMBER,
 	ARRLIT,
 	BINARY,
+	SWITCH,
 	TERNARY,
+	GENERIC,
 	COMPLIT,
 	GENCALL,
 	ELEMENT,
 	NUM_LIT,
 	CHR_LIT,
 	STR_LIT,
+	STR_LIT2,
 };
 
 export struct IdentExpr {
 	tok:   tokens.Token;
-	index: u16;
-	type:  names.NameType;
+	name:  names.NameInfo;
 };
 
 export struct BasicLit {
@@ -57,6 +60,7 @@ export struct FuncType {
 	args:       Args;
 	type:       FuncTypeEnum;
 	returnType: *Type;
+	varargs:    *IdentExpr;
 };
 
 export struct Block {
@@ -140,6 +144,30 @@ export struct GenCall {
 	index: u32;
 };
 
+export struct SwitchExpr {
+	initStmt: *Stmt;
+	expr:     *Expr;
+	conds:    vec *Expr;
+	vals:     vec *Expr;
+	defalt:   *Expr;
+};
+
+export struct MatchExpr {
+	initStmt: *Stmt;
+	expr:     *Expr;
+	conds:    vec *Pattern;
+	vals:     vec *Expr;
+	defalt:   *Expr;
+};
+
+export struct GenericExpr {
+	type:   *Type;
+	conds:  vec *Type;
+	vals:   vec *Expr;
+	defalt: *Expr;
+	index:  u16;
+};
+
 export union ExprUnion {
 	unary:   UnaryExpr;
 	binary:  BinaryExpr;
@@ -155,8 +183,12 @@ export union ExprUnion {
 	funcExpr:  FuncExpr;
 	awaitExpr: AwaitExpr;
 
+	swtch:   SwitchExpr;
+	mtch:    MatchExpr;
+	genric:  GenericExpr;
 	member:  MemberExpr;
 	element: ElementExpr;
+	
 	genCall: GenCall;
 	isExpr:  IsExpr;
 	name:    names.NameInfo;
@@ -172,6 +204,7 @@ export struct Expr {
 // Types
 export enum TypeType {
 	BASIC,
+	EXPR,
 	FUNC,
 	ENUM,
 	TUPLE,
@@ -189,7 +222,7 @@ export enum TypeType {
 	TEMPLATE
 };
 
-export struct BasicType {
+export struct BasicExprType {
 	expr: *Expr;
 };
 
@@ -215,14 +248,28 @@ export struct TupleType {
 	types: vec *Type;
 };
 
-export struct StructType {
-	props:        vec *Stmt;
-	methods:      vec *Stmt;
-	superStructs: vec *Expr;
+export struct StructPropSOA {
+	idents: vec IdentExpr;
+	types:  vec *Type;
 };
 
-export struct StaticType {
-	base: *Type;
+export struct StructMethodSOA {
+	idents: vec IdentExpr;
+	types:  vec *Type;
+	blocks: vec Block;
+};
+
+export struct StructTemplateMethodSOA {
+	idents: vec IdentExpr;
+	types:  vec *Type;
+};
+
+export struct StructType {
+	name:         *IdentExpr;
+	props:        StructPropSOA;
+	methods:      StructMethodSOA;
+	tmplates:     StructTemplateMethodSOA;
+	superStructs: vec *Expr;
 };
 
 export struct ConstType {
@@ -230,10 +277,6 @@ export struct ConstType {
 };
 
 export struct PromiseType {
-	base: *Type;
-};
-
-export struct CaptureType {
 	base: *Type;
 };
 
@@ -262,8 +305,10 @@ export struct TypeOrExpr {
 };
 
 export struct TemplateType {
-	data:   TypeOrExpr;
+	type:   TypeExprEnum;
 	params: vec IdentExpr;
+	data:   TypeExprUnion;
+	datas:  vec TypeExprUnion;
 	args:   vec vec *Type;
 };
 
@@ -272,14 +317,12 @@ export union TypeUnion {
 	enm:      EnumType;
 	tupl:     TupleType;
 	cnst:     ConstType;
+	expr:     BasicExprType;
 	unon:     UnionType;
 	array:    ArrayType;
-	basic:    BasicType;
 	strct:    StructType;
-	statc:    StaticType;
 	promse:   PromiseType;
 	vector:   VectorType;
-	cpture:   CaptureType;
 	pointer:  PointerType;
 	impArray: ImpArrayType;
 	tmplate:  TemplateType;
@@ -289,13 +332,14 @@ export union TypeUnion {
 export struct Type {
 	type: TypeType;
 	data: TypeUnion;
-	id:   u64;
+	labl: u8;
 	..tokens.Base;
 };
 
 // Statements
 export enum StmtType {
 	NULL,
+	__C,
 	DEC,
 	LOOP,
 	EXPR,
@@ -303,6 +347,7 @@ export enum StmtType {
 	FUNC,
 	SCASE,
 	MCASE,
+	GCASE,
 	BLOCK,
 	LABEL,
 	MATCH,
@@ -313,6 +358,7 @@ export enum StmtType {
 	SWITCH,
 	RETURN,
 	DELETE,
+	GENERIC,
 	DEFAULT,
 	IF_ELSE,
 	TYPEDEF,
@@ -320,7 +366,25 @@ export enum StmtType {
 	CONTINUE
 };
 
+export struct Buff {
+	ptr: *i8;
+	len: size_t;
+};
+
+export struct __C {
+	stuff: vec *Expr;
+};
+
+export enum StorageClass {
+	AUTO,
+	STATIC,
+	EXTERN,
+	C_EXTERN,
+	REGISTER,
+};
+
 export struct Declaration {
+	sClass: StorageClass;
 	idents: vec *Expr;
 	types:  vec *Type;
 	values: vec *Expr;
@@ -342,6 +406,14 @@ export struct Switch {
 	expr:     *Expr;
 	block:    Block;
 	initStmt: *Stmt;
+};
+
+export struct Generic {
+	type:     *Type;
+	block:    Block;
+	initStmt: *Stmt;
+	start:    u16;
+	end:      u16;
 };
 
 export struct Match {
@@ -367,6 +439,10 @@ export struct SwitchCase {
 
 export struct MatchCase {
 	val: *Pattern;
+};
+
+export struct GenericCase {
+	val: *Type;
 };
 
 export struct Assignment {
@@ -414,6 +490,7 @@ export struct Template {
 export union StmtUnion {
 	del:      Delete;
 	dec:      Declaration;
+	___c:     __C;
 	loop:     Loop;
 	tdef:     Typedef;
 	block:    Block;
@@ -429,8 +506,10 @@ export union StmtUnion {
 	gotoh:    Goto;
 	scase:    SwitchCase;
 	mcase:    MatchCase;
+	gcase:    GenericCase;
 	mtch:     Match;
 	tmplate:  Template;
+	genric:   Generic;
 };
 
 export struct Stmt {
@@ -501,4 +580,8 @@ export struct Pattern {
 	type: PatternType;
 	data: PatternUnion;
 	..tokens.Base;
+};
+
+export struct File {
+	stmts: vec *Stmt;
 };

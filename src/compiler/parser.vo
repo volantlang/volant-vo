@@ -13,17 +13,9 @@ struct ParserState {
 
 struct ParserContext {
 	stack: vec ast.StmtType;
-	inSwitch: bool;
-	inMatch:  bool;
-	inLoop:   bool;
 };
 func NewParserContext() ParserContext {
-	return (ParserContext){
-		inSwitch: false,
-		inMatch:  false,
-		inLoop:   false,
-		stack:    (vec ast.StmtType){}
-	};
+	return (ParserContext){stack: (vec ast.StmtType){}};
 };
 
 export struct Parser {
@@ -136,16 +128,6 @@ export struct Parser {
 		}
 		return types;
 	};
-	func decTypeVec(self: *Parser) vec *ast.Type {
-		types := (vec *ast.Type){};
-		types.push(self.decType());
-
-		for self.peek().sType == tokens.STokenType.COMMA {
-			self.eat();
-			types.push(self.decType());
-		}
-		return types;
-	};
 	func exprVec(self: *Parser) vec *ast.Expr {
 		exprs := (vec *ast.Expr){};
 		exprs.push(self.expr());
@@ -165,6 +147,16 @@ export struct Parser {
 			patterns.push(self.pattern());
 		}
 		return patterns;
+	};
+	func file(self: *Parser) ast.File {
+		self.eat();
+		stmts := (vec *ast.Stmt){};
+
+		for tok := self.peek(); tok.pType != tokens.PTokenType.EOF; tok = self.peek() {
+			stmt := self.globalStmt();
+			stmts.push(stmt);
+		}
+		return (ast.File){stmts: stmts};
 	};
 	func globalStmt(self: *Parser) *ast.Stmt {
 		s := self.globalStmtRaw();
@@ -200,7 +192,17 @@ export struct Parser {
 			return self.tdef();
 		case tokens.STokenType.TEMPLATE:
 			return self.tmplate();
+		case tokens.STokenType.__C:
+			return self.___c();
+		case tokens.STokenType.REGISTER:
+		case tokens.STokenType.STATIC:
+		case tokens.STokenType.AUTO:
+		case tokens.STokenType.EXTERN:
+		case tokens.STokenType.C_EXTERN:
+			return self.dec();
 		/*
+		case tokens.STokenType.EXTERN:
+			return self.extrn();
 		case tokens.STokenType.EXPORT:
 			return self.exprt();
 		*/
@@ -238,6 +240,8 @@ export struct Parser {
 			return self.ifElse();
 		case tokens.STokenType.SWITCH:
 			return self.swtch();
+		case tokens.STokenType.GENERIC:
+			return self.genric();
 		case tokens.STokenType.FOR:
 			return self.loop();
 		case tokens.STokenType.MATCH:
@@ -262,6 +266,14 @@ export struct Parser {
 			return self.labl();
 		case tokens.STokenType.GOTO:
 			return self.gotoh();
+		case tokens.STokenType.__C:
+			return self.___c();
+		case tokens.STokenType.REGISTER:
+		case tokens.STokenType.STATIC:
+		case tokens.STokenType.AUTO:
+		case tokens.STokenType.EXTERN:
+		case tokens.STokenType.C_EXTERN:
+			return self.dec();
 		case tokens.STokenType.CASE:
 			goto casee;
 		case tokens.STokenType.DEFAULT:
@@ -271,33 +283,35 @@ export struct Parser {
 		}
 	
 	label brak:
-		if self.context.inLoop || self.context.inSwitch || self.context.inMatch {
+		// if self.context.inLoop || self.context.inSwitch || self.context.inMatch || self.context.inGeneric {
 			return self.brak();
-		}
-		self.error("bruh break not allowed outside loops, match and switch statements.");
+		// }
+		// self.error("bruh break not allowed outside loops, match and switch statements.");
 	label continuee:
-		if self.context.inLoop {
+		// if self.context.inLoop {
 			return self.continuee();
-		}
-		self.error("bruh continue not allowed outside loops.");
+		// }
+		// self.error("bruh continue not allowed outside loops.");
 	label casee:
 		if self.context.stack.length > 0 {
 			x: ast.StmtType = self.context.stack[self.context.stack.length - 1];
-			for i := self.context.stack.length; i >= 0 && x != ast.StmtType.SWITCH && x != ast.StmtType.MATCH; x = self.context.stack[--i] {}
+			for i := self.context.stack.length; i >= 0 && x != ast.StmtType.SWITCH && x != ast.StmtType.MATCH && x != ast.StmtType.GENERIC; x = self.context.stack[--i] {}
 
 			if x == ast.StmtType.SWITCH {
 				return self.switchCase();
 			} else if x == ast.StmtType.MATCH {
 				return self.matchCase();
+			} else if x == ast.StmtType.GENERIC {
+				return self.genericCase();
 			}
 		}
 		self.error("bruh case not allowed outside switch and match statements.");
 	label defalt:
-		if self.context.inSwitch || self.context.inMatch {
+		// if self.context.inSwitch || self.context.inMatch || self.context.inGeneric {
 			return self.defalt();
-		}
-		self.error("bruh default not allowed outside switch statements.");
-		return null;
+		// }
+		// self.error("bruh default not allowed outside switch/match/generic statements.");
+		// return null;
 	};
 	func basicStmt(self: *Parser) *ast.Stmt {
 		tok := self.peek();
@@ -333,11 +347,11 @@ export struct Parser {
 			}
 		}
 	label defalt:
-		if self.context.inSwitch || self.context.inMatch {
+		// if self.context.inSwitch || self.context.inMatch {
 			return self.defalt();
-		}
-		self.error("bruh default not allowed outside switch statements.");
-		return null;
+		// }
+		// self.error("bruh default not allowed outside switch statements.");
+		// return null;
 	};
 	func nullStmt(self: *Parser) *ast.Stmt {
 		state := self.state();
@@ -431,6 +445,22 @@ export struct Parser {
 		self.eat();
 		return c;
 	};
+	func genericCase(self: *Parser) *ast.Stmt {
+		state := self.state();
+		gcase := self.genericCaseRaw();
+
+		stmt := self.stmtNode(&state);
+		stmt.type = ast.StmtType.GCASE;
+		stmt.data.gcase = gcase;
+		return stmt;
+	};
+	func genericCaseRaw(self: *Parser) ast.GenericCase {
+		self.eat();
+		c := (ast.GenericCase){val: self.type()};
+		self.expectSec(tokens.STokenType.COLON);
+		self.eat();
+		return c;
+	};
 	func block(self: *Parser) *ast.Stmt {
 		state := self.state();
 		block := self.blockRaw();
@@ -502,11 +532,40 @@ export struct Parser {
 	};
 	func dec(self: *Parser) *ast.Stmt {
 		state := self.state();
+		t: ast.StorageClass;
+
+		switch self.peek().sType {
+		case tokens.STokenType.AUTO:
+			t = ast.StorageClass.AUTO;
+			self.eat();
+			break;
+		case tokens.STokenType.REGISTER:
+			t = ast.StorageClass.REGISTER;
+			self.eat();
+			break;
+		case tokens.STokenType.C_EXTERN:
+			t = ast.StorageClass.C_EXTERN;
+			self.eat();
+			break;
+		case tokens.STokenType.EXTERN:
+			t = ast.StorageClass.EXTERN;
+			self.eat();
+			break;
+		case tokens.STokenType.STATIC:
+			t = ast.StorageClass.STATIC;
+			self.eat();
+			break;
+		default:
+			t = ast.StorageClass.AUTO;
+			break;
+		}
 		idents := self.exprVec();
 
-		return self.decBody(&state, idents);
+		s := self.decBody(&state, idents);
+		s.data.dec.sClass = t;
+		return s;
 	};
-	func decBody(self: *Parser, statePtr: *ParserState, e: *void) *ast.Stmt {
+	func decBodyRaw(self: *Parser, e: *void) ast.Declaration {
 		exprs := cast(vec *ast.Expr)e;
 		
 		for i := 0; i < exprs.length; ++i {
@@ -516,7 +575,7 @@ export struct Parser {
 		dec := (ast.Declaration){idents: exprs};
 		
 		if self.peek().sType != tokens.STokenType.EQ {
-			dec.types = self.decTypeVec();
+			dec.types = self.typeVec();
 		} else {
 			dec.types = (vec *ast.Type){};
 			goto eq;
@@ -529,6 +588,10 @@ export struct Parser {
 		} else {
 			dec.values = null;
 		}
+		return dec;
+	};
+	func decBody(self: *Parser, statePtr: *ParserState, e: *void) *ast.Stmt {
+		dec := self.decBodyRaw(e);
 
 		stmt := self.stmtNode(statePtr);
 		stmt.type = ast.StmtType.DEC;
@@ -550,7 +613,7 @@ export struct Parser {
 		self.expectSec(tokens.STokenType.COLON);
 		self.eat();
 
-		dec.types = self.decTypeVec();
+		dec.types = self.typeVec();
 		dec.values = null;
 
 		return dec;
@@ -587,20 +650,29 @@ export struct Parser {
 		stmt := self.stmtNode(&state);
 		stmt.type = ast.StmtType.FUNC;
 		stmt.data.funcDec = dec;
-
 		return stmt;
 	};
-	func funcDecRaw(self: *Parser) ast.FuncDec {
+	func funcDecNoBlock(self: *Parser) *ast.Stmt {
+		state := self.state();
+		dec := self.funcDecRawNoBlock();
+
+		stmt := self.stmtNode(&state);
+		stmt.type = ast.StmtType.FUNC;
+		stmt.data.funcDec = dec;
+		return stmt;
+	};
+	func funcDecRawNoBlock(self: *Parser) ast.FuncDec {
 		self.eat();
 
 		dec := (ast.FuncDec){};
 		dec.type.args.names = (vec ast.IdentExpr){};
 		dec.type.args.types = (vec *ast.Type){};
+		dec.type.varargs = null;
 
 		tok := self.peek();
 
 		if tok.pType == tokens.PTokenType.IDENT {
-			dec.type.type = ast.FuncTypeEnum.ORD;
+			dec.type.type = ast.FuncTypeEnum.NATIVE;
 			dec.name = new ast.IdentExpr{tok};
 			goto funcBody;
 		}
@@ -619,7 +691,7 @@ export struct Parser {
 			self.eat();
 			break;
 		default:
-			dec.type.type = ast.FuncTypeEnum.ORD;
+			dec.type.type = ast.FuncTypeEnum.NATIVE;
 			break;
 		}
 		dec.name = new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
@@ -637,25 +709,40 @@ export struct Parser {
 		for self.peek().sType == tokens.STokenType.COMMA {
 			self.eat();
 
-		label body:	
-			dec.type.args.names.push((ast.IdentExpr){self.expectPri(tokens.PTokenType.IDENT)});
-			self.eat();
-			self.expectSec(tokens.STokenType.COLON);
-			self.eat();
-			dec.type.args.types.push(self.type());
+		label body:
+			if tok := self.peek(); tok.pType == tokens.PTokenType.IDENT {
+				dec.type.args.names.push((ast.IdentExpr){tok: tok});
+				self.eat();
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				dec.type.args.types.push(self.type());
+			} else if tok.sType == tokens.STokenType.DOTDOT {
+				self.eat();
+				dec.type.varargs = new ast.IdentExpr{tok: self.expectPri(tokens.PTokenType.IDENT)};
+				self.eat();
+				break;
+			} else {
+				self.error("bruhhh");
+			}
 		}
 		self.expectPri(tokens.PTokenType.RPAREN);
-	
+
 	label next:
 		self.eat();
 
-		if self.peek().pType == tokens.PTokenType.LCBRACE {
+		if p := self.peek().pType; 
+			p == tokens.PTokenType.LCBRACE   || 
+			p == tokens.PTokenType.RPAREN    ||
+			p == tokens.PTokenType.SEMICOLON {
 			dec.type.returnType = null;
 		} else {
 			dec.type.returnType = self.type();
 			self.expectPri(tokens.PTokenType.LCBRACE);
 		}
-
+		return dec;
+	};
+	func funcDecRaw(self: *Parser) ast.FuncDec {
+		dec := self.funcDecRawNoBlock();
 		dec.body = self.blockRaw();
 		return dec;
 	};
@@ -707,8 +794,7 @@ export struct Parser {
 			blocks:	(vec ast.Block){}
 		};
 		
-		label body:
-
+	label body:
 		self.eat();
 		stmt := self.basicStmt();
 			
@@ -741,7 +827,6 @@ export struct Parser {
 		if self.peek().sType == tokens.STokenType.IF {
 			goto body;
 		}
-		
 		self.expectPri(tokens.PTokenType.LCBRACE);
 		ifElse.elseBlock = self.blockRaw();
 		return ifElse;
@@ -772,13 +857,41 @@ export struct Parser {
 			self.expectPri(tokens.PTokenType.LCBRACE);
 		}
 		self.context.stack.push(ast.StmtType.SWITCH);
-		self.context.inSwitch = true;
-		
 		swtch.block = self.blockRaw();
-
-		self.context.inSwitch = false;
 		self.context.stack.pop();
 		return swtch;
+	};
+	func genric(self: *Parser) *ast.Stmt {
+		state := self.state();
+		genric := self.genricRaw();
+		
+		stmt := self.stmtNode(&state);
+		stmt.type = ast.StmtType.GENERIC;
+		stmt.data.genric = genric;
+		return stmt;
+	};
+	func genricRaw(self: *Parser) ast.Generic {
+		self.eat();
+		genric := (ast.Generic){};
+		/*
+		if stmt := self.basicStmt(); self.peek().pType == tokens.PTokenType.LCBRACE {
+			self.assert(stmt.type == ast.StmtType.EXPR, "bruh gib expression, not type");
+			genric.initStmt = null;
+			genric.type = stmt.data.expr.expr;
+			delete stmt;
+		} else {
+			genric.initStmt = stmt;
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+		*/
+			genric.initStmt = null;
+			genric.type = self.type();
+			self.expectPri(tokens.PTokenType.LCBRACE);
+		// }
+		self.context.stack.push(ast.StmtType.GENERIC);
+		genric.block = self.blockRaw();
+		self.context.stack.pop();
+		return genric;
 	};
 	func loop(self: *Parser) *ast.Stmt {
 		state := self.state();
@@ -842,11 +955,7 @@ export struct Parser {
 		}
 	label end:
 		self.context.stack.push(ast.StmtType.LOOP);
-		self.context.inLoop = true;
-
 		loop.block = self.blockRaw();
-		
-		self.context.inLoop = false;
 		self.context.stack.pop();
 		return loop;
 	};
@@ -876,11 +985,7 @@ export struct Parser {
 			self.expectPri(tokens.PTokenType.LCBRACE);
 		}
 		self.context.stack.push(ast.StmtType.MATCH);
-		self.context.inMatch = true;
-
 		mtch.block = self.blockRaw();
-
-		self.context.inMatch = false;
 		self.context.stack.pop();
 		return mtch;
 	};
@@ -940,15 +1045,42 @@ export struct Parser {
 		self.eat();
 
 		if self.peek().sType == tokens.STokenType.FUNC {
-			tmplate.type.data.data.expr = self.funcExpr();
-			tmplate.type.data.type = ast.TypeExprEnum.EXPR;
+			x := self.funcExpr();
+			(cast(*ast.FuncType)x.data.funcExpr.type).type = ast.FuncTypeEnum.NATIVE;
+
+			tmplate.type.data.expr = x;
+			tmplate.type.type = ast.TypeExprEnum.EXPR;
 		} else {
-			tmplate.type.data.data.type = self.type();
-			tmplate.type.data.type = ast.TypeExprEnum.TYPE;
+			tmplate.type.data.type = self.type();
+			tmplate.type.type = ast.TypeExprEnum.TYPE;
 		}
 
+		tmplate.type.datas = (vec ast.TypeExprUnion){};
 		tmplate.type.args = (vec vec *ast.Type){};
+		
 		return tmplate;
+	};
+	func ___c(self: *Parser) *ast.Stmt {
+		state := self.state();
+		___c := self.___cRaw();
+
+		stmt := self.stmtNode(&state);
+		stmt.type = ast.StmtType.__C;
+		stmt.data.___c = ___c;
+		return stmt; 
+	};
+	func ___cRaw(self: *Parser) ast.__C {
+		self.eat();
+		self.expectPri(tokens.PTokenType.LCBRACE);
+		self.eat();
+
+		___c := (ast.__C){stuff: (vec *ast.Expr){}};
+		
+		for self.peek().pType != tokens.PTokenType.RCBRACE {
+			___c.stuff.push(self.expr());
+		}
+		self.eat();
+		return ___c;
 	};
 	func expr(self: *Parser) *ast.Expr {
 		return self.expr0();
@@ -1128,6 +1260,12 @@ export struct Parser {
 			return self.sizeExpr();
 		case tokens.STokenType.NEW:
 			return self.newExpr();
+		case tokens.STokenType.SWITCH:
+			return self.swtchExpr();
+		case tokens.STokenType.MATCH:
+			return self.mtchExpr();
+		case tokens.STokenType.GENERIC:
+			return self.genricExpr();
 		case tokens.STokenType.MUL: 
 		case tokens.STokenType.AND: 
 		case tokens.STokenType.ADD: 
@@ -1213,8 +1351,8 @@ export struct Parser {
 		}
 		if e.type == ast.TypeExprEnum.EXPR {
 			t := self.typeNode(&state);
-			t.type = ast.TypeType.BASIC;
-			t.data.basic = (ast.BasicType){expr: e.data.expr};
+			t.type = ast.TypeType.EXPR;
+			t.data.expr = (ast.BasicExprType){expr: e.data.expr};
 			e.data.type = t;
 		}
 		c := (ast.CompLit){type: e.data.type};
@@ -1259,6 +1397,11 @@ export struct Parser {
 			expr = self.exprNode(&state);
 			expr.type = ast.ExprType.STR_LIT;
 			goto end;
+		case tokens.PTokenType.STR_LIT2:
+			self.eat();
+			expr = self.exprNode(&state);
+			expr.type = ast.ExprType.STR_LIT2;
+			goto end;
 		case tokens.PTokenType.CHAR_LIT:
 			self.eat();
 			expr = self.exprNode(&state);
@@ -1278,6 +1421,7 @@ export struct Parser {
 		default:
 			break;
 		}
+		tok.println();
 		self.error("expected expr, got {tok}");
 		
 	label end:
@@ -1294,7 +1438,7 @@ export struct Parser {
 			break;
 		default:
 			r.type = ast.TypeExprEnum.EXPR;
-			r.data.type = self.expr();
+			r.data.expr = self.expr();
 		}
 		return r;
 	};
@@ -1487,6 +1631,7 @@ export struct Parser {
 		function.type = new ast.FuncType;
 		function.type.args.names = (vec ast.IdentExpr){};
 		function.type.args.types = (vec *ast.Type){};
+		function.type.varargs = null;
 
 		tok := self.peek();
 
@@ -1517,36 +1662,185 @@ export struct Parser {
 			self.eat();
 
 		label body:
-			function.type.args.names.push((ast.IdentExpr){self.expectPri(tokens.PTokenType.IDENT)});
-			self.eat();
-			self.expectSec(tokens.STokenType.COLON);
-			self.eat();
-			function.type.args.types.push(self.type());
+			if tok := self.peek(); tok.pType == tokens.PTokenType.IDENT {
+				function.type.args.names.push((ast.IdentExpr){tok: tok});
+				self.eat();
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				function.type.args.types.push(self.type());
+			} else if tok.sType == tokens.STokenType.DOTDOT {
+				self.eat();
+				function.type.varargs = new ast.IdentExpr{tok: self.expectPri(tokens.PTokenType.IDENT)};
+				self.eat();
+				break;
+			} else {
+				self.error("bruhhh");
+			}
 		}
 		self.expectPri(tokens.PTokenType.RPAREN);
 
 	label next:
 		self.eat();
 
-		function.type.returnType = self.type();
+		if self.peek().pType != tokens.PTokenType.LCBRACE {
+			function.type.returnType = self.type();
+		} else {
+			function.type.returnType = null;
+		}
 		function.body = self.blockRaw();
 		return function;
 	};
-	func decType(self: *Parser) *ast.Type {
+	func swtchExpr(self: *Parser) *ast.Expr {
 		state := self.state();
-		
-		switch self.peek().sType {
-		case tokens.STokenType.STATIC:
-			self.eat();
+		swtch := self.swtchExprRaw();
 
-			statc := (ast.StaticType){base: self.type()};
-			type := self.typeNode(&state);
-			type.type = ast.TypeType.STATIC;
-			type.data.statc = statc;
-			return type;
-		default:
-			return self.type();
+		expr := self.exprNode(&state);
+		expr.type = ast.ExprType.SWITCH;
+		expr.data.swtch = swtch;
+		return expr;
+	};
+	func swtchExprRaw(self: *Parser) ast.SwitchExpr {
+		self.eat();		
+		swtch := (ast.SwitchExpr){conds: (vec *ast.Expr){}, vals: (vec *ast.Expr){}};
+		
+		if stmt := self.basicStmt(); self.peek().pType == tokens.PTokenType.LCBRACE {
+			self.assert(stmt.type == ast.StmtType.EXPR, "bruh gib expression, not type");
+			swtch.initStmt = null;
+			swtch.expr = stmt.data.expr.expr;
+			delete stmt;
+		} else {
+			swtch.initStmt = stmt;
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+			swtch.expr = self.expr();
+			self.expectPri(tokens.PTokenType.LCBRACE);
 		}
+		self.eat();
+
+		for s := self.peek().sType;; s = self.peek().sType {
+			switch s {
+			case tokens.STokenType.CASE:
+				self.eat();
+				swtch.conds.push(self.expr());
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				swtch.vals.push(self.expr());
+				break;
+			case tokens.STokenType.DEFAULT:
+				self.eat();
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				swtch.defalt = self.expr();
+				break;
+			default:
+				goto out;
+			}
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+		}
+
+	label out:
+		self.expectPri(tokens.PTokenType.RCBRACE);
+		self.eat();
+		return swtch;
+	};
+	func mtchExpr(self: *Parser) *ast.Expr {
+		state := self.state();
+		mtch := self.mtchExprRaw();
+		
+		expr := self.exprNode(&state);
+		expr.type = ast.ExprType.MATCH;
+		expr.data.mtch = mtch;
+		return expr;
+	};
+	func mtchExprRaw(self: *Parser) ast.MatchExpr {
+		self.eat();
+		mtch := (ast.MatchExpr){conds: (vec *ast.Pattern){}, vals: (vec *ast.Expr){}};
+		
+		if stmt := self.basicStmt(); self.peek().pType == tokens.PTokenType.LCBRACE {
+			self.assert(stmt.type == ast.StmtType.EXPR, "bruh gib expression, not type");
+			mtch.initStmt = null;
+			mtch.expr = stmt.data.expr.expr;
+			delete stmt;
+		} else {
+			mtch.initStmt = stmt;
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+			mtch.expr = self.expr();
+			self.expectPri(tokens.PTokenType.LCBRACE);
+		}
+		self.eat();
+
+		for s := self.peek().sType;; s = self.peek().sType {
+			switch s {
+			case tokens.STokenType.CASE:
+				self.eat();
+				mtch.conds.push(self.pattern());
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				mtch.vals.push(self.expr());
+				break;
+			case tokens.STokenType.DEFAULT:
+				self.eat();
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				mtch.defalt = self.expr();
+				break;
+			default:
+				goto out;
+			}
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+		}
+
+	label out:
+		self.expectPri(tokens.PTokenType.RCBRACE);
+		self.eat();
+		return mtch;
+	};
+	func genricExpr(self: *Parser) *ast.Expr {
+		state := self.state();
+		genric := self.genricExprRaw();
+
+		expr := self.exprNode(&state);
+		expr.type = ast.ExprType.GENERIC;
+		expr.data.genric = genric;
+		return expr;
+	};
+	func genricExprRaw(self: *Parser) ast.GenericExpr {
+		self.eat();		
+		genric := (ast.GenericExpr){conds: (vec *ast.Expr){}, vals: (vec *ast.Expr){}};
+		
+		genric.type = self.type();
+		self.expectPri(tokens.PTokenType.LCBRACE);
+		self.eat();
+
+		for s := self.peek().sType;; s = self.peek().sType {
+			switch s {
+			case tokens.STokenType.CASE:
+				self.eat();
+				genric.conds.push(self.type());
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				genric.vals.push(self.expr());
+				break;
+			case tokens.STokenType.DEFAULT:
+				self.eat();
+				self.expectSec(tokens.STokenType.COLON);
+				self.eat();
+				genric.defalt = self.expr();
+				break;
+			default:
+				goto out;
+			}
+			self.expectPri(tokens.PTokenType.SEMICOLON);
+			self.eat();
+		}
+
+	label out:
+		self.expectPri(tokens.PTokenType.RCBRACE);
+		self.eat();
+		return genric;
 	};
 	func type(self: *Parser) *ast.Type { // array
 		state := self.state();
@@ -1592,7 +1886,7 @@ export struct Parser {
 		type.data.pointer = (ast.PointerType){base: base};
 		return type;
 	};
-	func type2(self: *Parser) *ast.Type { // const, capture, static, promise, vec keywords
+	func type2(self: *Parser) *ast.Type { // const, capture, promise, vec keywords
 		type: *ast.Type;
 		state := self.state();
 		t: *ast.Type;
@@ -1612,13 +1906,6 @@ export struct Parser {
 			type.type = ast.TypeType.CONST;
 			type.data.cnst = (ast.ConstType){base: t};
 			break;
-		case tokens.STokenType.CAPTURE:
-			self.eat();
-			t = self.type();
-			type = self.typeNode(&state);
-			type.type = ast.TypeType.CAPTURE;
-			type.data.cpture = (ast.CaptureType){base: t};
-			break;
 		case tokens.STokenType.PROMISE:
 			self.eat();
 			t = self.type();
@@ -1631,7 +1918,7 @@ export struct Parser {
 		}
 		return type;
 	};
-	func type3(self: *Parser) *ast.Type { // function, struct, tuple, enum, parenthesis, basic type
+	func type3(self: *Parser) *ast.Type { // function, struct, tuple, enum, parenthesis, basic, expr type
 		tok := self.peek();
 		
 		switch tok.sType {
@@ -1649,14 +1936,23 @@ export struct Parser {
 			break;
 		}
 		switch tok.pType {
-		case tokens.PTokenType.LPAREN:
+		case tokens.PTokenType.LPAREN: {
 			self.eat();
 			t := self.type();
 			self.expectPri(tokens.PTokenType.RPAREN);
 			self.eat();
-			t.buff--; // for parenthesis
-			t.len += 2;
 			return t;
+		}
+		case tokens.PTokenType.TYPE: {
+			state := self.state();
+			self.eat();
+
+			t := self.typeNode(&state);
+			t.type = ast.TypeType.BASIC;
+			t.buff = tok.buff;
+			t.len = tok.len;
+			return t;
+		}
 		default:
 			break;
 		}
@@ -1668,8 +1964,8 @@ export struct Parser {
 		}
 
 		type := self.typeNode(&state);
-		type.type = ast.TypeType.BASIC;
-		type.data.basic = (ast.BasicType){expr};
+		type.type = ast.TypeType.EXPR;
+		type.data.expr = (ast.BasicExprType){expr};
 		return type;
 	};
 	func genCallType(self: *Parser, e: *ast.Expr, statePtr: *ParserState) *ast.Type {
@@ -1693,6 +1989,7 @@ export struct Parser {
 	};
 	func funcType(self: *Parser) *ast.Type {
 		state := self.state();
+		self.eat();
 		fnc := self.funcTypeRaw();
 
 		type := self.typeNode(&state);
@@ -1701,8 +1998,6 @@ export struct Parser {
 		return type;
 	};
 	func funcTypeRaw(self: *Parser) ast.FuncType {
-		self.eat();
-
 		t := (ast.FuncType){};
 		tok := self.peek();
 
@@ -1720,7 +2015,7 @@ export struct Parser {
 			self.eat();
 			break;
 		default:
-			t.type = ast.FuncTypeEnum.ORD;
+			t.type = ast.FuncTypeEnum.NATIVE;
 			break;
 		}
 		self.expectPri(tokens.PTokenType.LPAREN);
@@ -1738,7 +2033,13 @@ export struct Parser {
 			self.expectSec(tokens.STokenType.COMMA);
 			self.eat();
 		label body:
-			t.args.types.push(self.type());
+			if tok := self.peek(); tok.sType == tokens.STokenType.DOTDOT {
+				self.eat();
+				t.varargs = cast(*void)1;
+				break;
+			} else {
+				t.args.types.push(self.type());
+			}
 		}
 
 	label next:
@@ -1769,6 +2070,8 @@ export struct Parser {
 		self.eat();
 
 		type := self.structBody();
+
+		type.data.strct.name = name;
 		return (ast.Typedef){name: name, type: type};
 	};
 	func structType(self: *Parser) *ast.Type {
@@ -1794,23 +2097,28 @@ export struct Parser {
 	func structBodyRaw(self: *Parser) ast.StructType {
 		self.expectPri(tokens.PTokenType.LCBRACE);
 		self.eat();
-
+		
 		strct := (ast.StructType){};
-		strct.props = (vec *ast.Stmt){};
-		strct.methods = (vec *ast.Stmt){};
+		strct.name = null;
+		strct.props = (ast.StructPropSOA){idents: (vec ast.IdentExpr){}, types: (vec *ast.Type){}};
+		strct.methods = (ast.StructMethodSOA){idents: (vec ast.IdentExpr){}, types: (vec ast.FuncType){}, blocks: (vec ast.Block){}};
+		strct.tmplates = (ast.StructTemplateMethodSOA){idents: (vec ast.IdentExpr){}, types: (vec ast.TemplateType){}};
 		strct.superStructs = (vec *ast.Expr){};
 
 		for tok := self.peek(); tok.pType != tokens.PTokenType.RCBRACE; tok = self.peek() {
-			switch tok.sType {
-			case tokens.STokenType.FUNC:
-				strct.methods.push(self.funcDec());
-				break;
+			switch tok := self.peek(); tok.sType {
 			case tokens.STokenType.DOTDOT:
 				self.eat();
 				strct.superStructs.push(self.expr());
 				break;
+			case tokens.STokenType.FUNC:
+				self.structMethod(strct);
+				break;
+			case tokens.STokenType.TEMPLATE:
+				self.structTemplate(strct);
+				break;
 			default:
-				strct.props.push(self.dec());
+				self.structProp(strct);
 				break;
 			}
 			self.expectPri(tokens.PTokenType.SEMICOLON);
@@ -1818,6 +2126,66 @@ export struct Parser {
 		}
 		self.eat();
 		return strct;
+	};
+	func structTemplate(self: *Parser, strct: ast.StructType){
+		state := self.state();
+		t := self.tmplateRaw();
+		
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.TEMPLATE;
+		type.data.tmplate = t.type;
+
+		strct.tmplates.idents.push(*t.name);
+		strct.tmplates.types.push(type);
+
+		delete t.name;
+	};
+	func structMethod(self: *Parser, strct: ast.StructType){
+		state := self.state();
+		f := self.funcDecRawNoBlock();
+
+		type := self.typeNode(&state);
+		type.type = ast.TypeType.FUNC;
+		type.data.fnc = f.type;
+
+		strct.methods.idents.push(*f.name);
+		strct.methods.types.push(type);
+		strct.methods.blocks.push(self.blockRaw());
+
+		delete f.name;
+	};
+	func structProp(self: *Parser, strct: ast.StructType){
+		i := 0;
+		goto loop1;
+
+		for self.peek().sType == tokens.STokenType.COMMA {
+			self.eat();
+		label loop1:
+			strct.props.idents.push((ast.IdentExpr){tok: self.expectPri(tokens.PTokenType.IDENT)});
+			self.eat();
+			++i;
+		}
+		self.expectSec(tokens.STokenType.COLON);
+		self.eat();
+		
+		j := 0;
+		t := self.type();
+		goto loop2;
+		
+		for self.peek().sType == tokens.STokenType.COMMA {
+			self.eat();
+			t = self.type();
+		label loop2:
+			strct.props.types.push(t);
+			++j;
+		}
+		if j != 1 && i != j {
+			self.error("invalid number of types in struct prop");
+		}
+		for j < i {
+			strct.props.types.push(t);
+			++j;
+		}
 	};
 	func enumTypedef(self: *Parser) *ast.Stmt {
 		state := self.state();

@@ -6,11 +6,13 @@ export enum PTokenType {
 	NULL = 0,
 
 	IDENT,
+	TYPE,
 	KEYWORD,
 
 	CHAR_LIT,  // char   literal
 	NUM_LIT,   // number literal
 	STR_LIT,   // string literal
+	STR_LIT2,  // string literals with ` delimiter
 
 	ASSIGN_OP, // assignment operator
 	ARITH_OP,  // arithmetic operator
@@ -71,6 +73,27 @@ export enum STokenType {
 	IS,
 	MATCH,
 	TEMPLATE,
+	GENERIC,
+	EXTERN,
+	__C,
+	REGISTER,
+	AUTO,
+	C_EXTERN,
+
+	// TYPES
+	TYPE_START,
+	I8,
+	I16,
+	I32,
+	I64,
+	U8,
+	U16,
+	U32,
+	U64,
+	F32,
+	F64,
+	BOOL,
+	VOID,
 
 	// Arithmetic operators
 	ADD,
@@ -78,7 +101,7 @@ export enum STokenType {
 	MUL,
 	DIV,
 	MOD,
-
+	
 	// Assignment operators
 	EQ,
 	ADDEQ,
@@ -133,14 +156,19 @@ export struct Base {
 };
 
 // do not change the sequence
-export KeywordsNum: u32 = 37;
-export Keywords: [40]*i8 = {
-	"for",    "switch", "if",      "else",    "func",    "struct",  "tuple",  "enum",
-	"case",   "async",  "work",    "import",  "return",  "default", "break",  "continue",
-	"new",    "const",  "vec",     "delete",  "typedef", "cast",    "sizeof", "export",
-	"union",  "static", "capture", "promise", "goto",    "label",   "await",  "as",
-	"native", "is",     "match",   "template"
+export KeywordsNum: u16 = 43;
+export Keywords: [45]*i8 = {
+	"for",    "switch", "if",      "else",     "func",    "struct",  "tuple",  "enum",
+	"case",   "async",  "work",    "import",   "return",  "default", "break",  "continue",
+	"new",    "const",  "vec",     "delete",   "typedef", "cast",    "sizeof", "export",
+	"union",  "static", "capture", "promise",  "goto",    "label",   "await",  "as",
+	"native", "is",     "match",   "template", "generic", "extern",  "__c",    "register",
+	"auto",   "c_extern"
 };
+
+// do not change the sequence
+export TypesNum: u16 = 14;
+export Types: [20]*i8 = {"i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "void", "bool", "size_t"};
 
 export struct Token {
 	pType: PTokenType;
