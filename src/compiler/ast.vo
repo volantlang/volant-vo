@@ -45,9 +45,13 @@ export struct Operator {
 
 // put this to their right place after fixing sorting
 export enum FuncTypeEnum {
-	ORD = 0,
+	ORD,
 	WORK,
-	ASYNC,
+	ASYNC
+};
+
+export enum FuncTypeEnum2 {
+	BLOCK,
 	NATIVE
 };
 
@@ -58,7 +62,8 @@ export struct Args {
 
 export struct FuncType {
 	args:       Args;
-	type:       FuncTypeEnum;
+	type1:      FuncTypeEnum;
+	type2:      FuncTypeEnum2;
 	returnType: *Type;
 	varargs:    *IdentExpr;
 };
@@ -134,7 +139,7 @@ export struct AwaitExpr {
 };
 
 export struct FuncExpr {
-	type:  *FuncType;
+	type:  *Type;
 	body:  Block;
 };
 
@@ -176,7 +181,7 @@ export union ExprUnion {
 	callExpr: CallExpr;
 	sizeExpr: SizeExpr;
 	castExpr: CastExpr;
-	
+
 	compLit:   CompLit;
 	arrayLit:  ArrayLit
 	newExpr:   NewExpr;
@@ -188,7 +193,7 @@ export union ExprUnion {
 	genric:  GenericExpr;
 	member:  MemberExpr;
 	element: ElementExpr;
-	
+
 	genCall: GenCall;
 	isExpr:  IsExpr;
 	name:    names.NameInfo;
@@ -228,15 +233,15 @@ export struct BasicExprType {
 
 export struct ArrayType {
 	size: *BasicLit;
-	base: *Type; 
+	base: *Type;
 };
 
 export struct ImpArrayType {
-	base: *Type; 
+	base: *Type;
 };
 
 export struct UnionType {
-	decs: vec *Stmt; 
+	decs: vec *Stmt;
 };
 
 export struct EnumType {
@@ -248,27 +253,9 @@ export struct TupleType {
 	types: vec *Type;
 };
 
-export struct StructPropSOA {
-	idents: vec IdentExpr;
-	types:  vec *Type;
-};
-
-export struct StructMethodSOA {
-	idents: vec IdentExpr;
-	types:  vec *Type;
-	blocks: vec Block;
-};
-
-export struct StructTemplateMethodSOA {
-	idents: vec IdentExpr;
-	types:  vec *Type;
-};
-
 export struct StructType {
 	name:         *IdentExpr;
-	props:        StructPropSOA;
-	methods:      StructMethodSOA;
-	tmplates:     StructTemplateMethodSOA;
+	props:        vec *Stmt;
 	superStructs: vec *Expr;
 };
 
@@ -366,11 +353,6 @@ export enum StmtType {
 	CONTINUE
 };
 
-export struct Buff {
-	ptr: *i8;
-	len: size_t;
-};
-
 export struct __C {
 	stuff: vec *Expr;
 };
@@ -417,8 +399,8 @@ export struct Generic {
 };
 
 export struct Match {
-	expr: *Expr;
-	block: Block;
+	expr:     *Expr;
+	block:    Block;
 	initStmt: *Stmt;
 };
 
@@ -466,7 +448,7 @@ export struct Typedef {
 
 export struct FuncDec {
 	name: *IdentExpr;
-	type: FuncType;
+	type: *Type;
 	body: Block;
 };
 
@@ -484,7 +466,7 @@ export struct ExprStmt {
 
 export struct Template {
 	name: *IdentExpr;
-	type: TemplateType;
+	type: *Type;
 };
 
 export union StmtUnion {
@@ -582,6 +564,26 @@ export struct Pattern {
 	..tokens.Base;
 };
 
+export struct GlobalStmt {
+	stmt:     *Stmt;
+	exported: bool;
+};
+
 export struct File {
-	stmts: vec *Stmt;
+	imprts:  vec *Stmt;
+	decs:     vec GlobalStmt;
+	funcs:    vec GlobalStmt;
+	tdefs:    vec GlobalStmt;
+	tmplates: vec GlobalStmt;
+	___cs:    vec *Stmt;
+};
+export func NewFile() File {
+	return (File){
+		decs:     (vec GlobalStmt){},
+		funcs:    (vec GlobalStmt){},
+		tdefs:    (vec GlobalStmt){},
+		tmplates: (vec GlobalStmt){},
+		___cs:    (vec *Stmt){},
+		imprts:   (vec *Stmt){}
+	};
 };

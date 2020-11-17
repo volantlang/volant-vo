@@ -4,7 +4,7 @@ import "ast.vo";
 
 export struct Copier {
 	nothing: u8;
-	
+
 	func stmtNode(self: *Copier, stmt: *ast.Stmt) *ast.Stmt {
 		return new ast.Stmt{
 			type:   stmt.type,
@@ -32,7 +32,7 @@ export struct Copier {
 			len:	type.len
 		};
 	};
-    func stmt(self: *Copier, stmt: *ast.Stmt) *ast.Stmt {
+	func stmt(self: *Copier, stmt: *ast.Stmt) *ast.Stmt {
 		s := self.stmtNode(stmt);
 		switch stmt.type {
 		case ast.StmtType.DEC:
@@ -149,7 +149,7 @@ export struct Copier {
 		return (ast.Delete){exprs: self.exprVec(del.exprs)};
 	};
 	func funcDec(self: *Copier, fnc: ast.FuncDec) ast.FuncDec {
-		return (ast.FuncDec){name: fnc.name, type: self.funcType(fnc.type), body: self.block(fnc.body)};
+		return (ast.FuncDec){name: fnc.name, type: self.type(fnc.type), body: self.block(fnc.body)};
 	};
 	func labl(self: *Copier, labl: ast.Label) ast.Label {
 		return labl;
@@ -276,7 +276,7 @@ export struct Copier {
 		return (ast.AwaitExpr){expr: self.expr(awaitExpr.expr)};
 	};
 	func funcExpr(self: *Copier, funcExpr: ast.FuncExpr) ast.FuncExpr {
-		return (ast.FuncExpr){type: new ast.FuncType(self.funcType(*funcExpr.type)), body: self.block(funcExpr.body)};
+		return (ast.FuncExpr){type: self.type(funcExpr.type), body: self.block(funcExpr.body)};
 	};
 	func genCall(self: *Copier, genCall: ast.GenCall) ast.GenCall {
 		return (ast.GenCall){expr: self.expr(genCall.expr), types: self.typeVec(genCall.types), index: genCall.index};
@@ -318,7 +318,7 @@ export struct Copier {
 		return (ast.BasicExprType){expr: self.expr(basic.expr)};
 	};
 	func funcType(self: *Copier, fnc: ast.FuncType) ast.FuncType {
-		return (ast.FuncType){type: fnc.type, returnType: fnc.returnType != null ? self.type(fnc.returnType) : null, args: (ast.Args){names: fnc.args.names, types: self.typeVec(fnc.args.types)}};
+		return (ast.FuncType){type1: fnc.type1, type2: fnc.type2, returnType: fnc.returnType != null ? self.type(fnc.returnType) : null, args: (ast.Args){names: fnc.args.names, types: self.typeVec(fnc.args.types)}};
 	};
 	func constType(self: *Copier, cnst: ast.ConstType) ast.ConstType {
 		return (ast.ConstType){base: self.type(cnst.base)};
@@ -327,7 +327,7 @@ export struct Copier {
 		return (ast.PointerType){base: self.type(pointer.base)};
 	};
 	func strct(self: *Copier, strct: ast.StructType) ast.StructType {
-		return (ast.StructType){props: (ast.StructPropSOA){idents: self.exprVec(strct.props.idents), types: self.typeVec(strct.props.types)}, superStructs: self.exprVec(strct.superStructs)};
+		return (ast.StructType){props: self.stmtVec(strct.props), superStructs: self.exprVec(strct.superStructs)};
 	};
 	func pattern(self: *Copier, pattern: *ast.Pattern) *ast.Pattern {
 		return pattern;

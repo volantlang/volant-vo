@@ -101,7 +101,7 @@ export enum STokenType {
 	MUL,
 	DIV,
 	MOD,
-	
+
 	// Assignment operators
 	EQ,
 	ADDEQ,
@@ -143,10 +143,10 @@ export enum STokenType {
 
 export struct Base {
 	buff:   *i8;
-	len:    size_t;
-	line:   size_t;
-	column: size_t;
-	
+	len:    i32;
+	line:   i32;
+	column: i32;
+
 	func print(self: *Base){
 		io.printn(self.buff, self.len);
 	};
@@ -189,7 +189,7 @@ export struct Token {
 		str += 10;
 
 		n = num.utos(cast(u32)self.sType, buf);
-		
+
 		mem.copy(str, buf, n);
 		str += n;
 

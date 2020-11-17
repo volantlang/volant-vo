@@ -1,36 +1,39 @@
 
 export enum NameType {
-    RAW = 0,
-    ENUM_PROP,
-    STRUCT_PROP,
-    METHOD,
-    VAR
+	RAW = 0,
+	ENUM_PROP,
+	STRUCT_PROP,
+	METHOD,
+	VAR,
+	IMPORT,
 };
 
 export struct NameSpace {
-    index: u16;
+	buff:  [6]i8;
+	len:   u16;
 };
 
 export struct NameInfo {
-    type: NameType;
-    index: u16;
+	type:  NameType;
+	index: NameSpace;
 };
 
 export func getPrefix(type: NameType) i8 {
-    switch type {
-    case NameType.ENUM_PROP:
-        return 'e';
-    case NameType.STRUCT_PROP:
-        return 'p';
-    case NameType.VAR:
-        return 'v';
-    case NameType.METHOD:
-        return 'm';
-    default:
-        return 0;
-    }
+	switch type {
+	case NameType.ENUM_PROP:
+		return 'e';
+	case NameType.STRUCT_PROP:
+		return 'p';
+	case NameType.IMPORT:
+	case NameType.VAR:
+		return 'v';
+	case NameType.METHOD:
+		return 'm';
+	default:
+		return 0;
+	}
 };
 
 export func isIndexed(type: NameType) bool {
-    return type == NameType.VAR || type == NameType.METHOD;
+	return type == NameType.VAR || type == NameType.METHOD;
 };

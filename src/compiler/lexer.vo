@@ -9,9 +9,9 @@ import "util.vo";
 export struct Lexer {
 	buff: *i8; // null terminated
 
-	position: size_t = 0;
-	column:   size_t = 0;
-	line:	  size_t = 1;
+	position: i32 = 0;
+	column:   i32 = 0;
+	line:	  i32 = 1;
 
 	func peek(self: *Lexer) i8 {
 		return *(self.buff + self.position);
@@ -87,7 +87,7 @@ export struct Lexer {
 	};
 	func skipMultilineComment(self: *Lexer) {
 		c: i8;
-		
+
 	label loop:
 		c = self.peek();
 
@@ -116,7 +116,7 @@ export struct Lexer {
 	};
 	func nextRaw(self: *Lexer) tokens.Token {
 		tok, c, c2 := self.tok(), self.peek(), self.peek16();
-		
+
 		if util.isIdentBegining(c) {
 			self.identifier(&tok);
 		} else if self.delimiter(&tok) {
@@ -133,7 +133,7 @@ export struct Lexer {
 		} else if util.isCharDelimiter(c) {
 			self.char(&tok);
 		} else if c == '0' {
-			self.numZero(&tok);  
+			self.numZero(&tok);
 		} else if util.isNumDec(c) {
 			self.number(&tok);
 		} else if c == 0 {
@@ -184,7 +184,7 @@ export struct Lexer {
 
 		tok.len = 1;
 		tok.pType = tokens.PTokenType.STR_LIT;
-		
+
 		char := self.peek();
 
 	label loop:
@@ -211,7 +211,7 @@ export struct Lexer {
 		tok.len = 0;
 		tok.buff++;
 		tok.pType = tokens.PTokenType.STR_LIT2;
-		
+
 		char := self.peek();
 
 	label loop:
@@ -257,7 +257,7 @@ export struct Lexer {
 	};
 	func utf8Char(self: *Lexer) size_t {
 		c := self.peek32();
-		
+
 		if ((c >> 0x18) & 0x80) == 0 {
 			self.eat();
 			return 1;
@@ -272,7 +272,7 @@ export struct Lexer {
 			self.eat32();
 			return 4;
 		}
-		
+
 		self.error("invalid unicode char");
 		return 0;
 	};
@@ -322,7 +322,7 @@ export struct Lexer {
 
 		p := self.position;
 		self.eat();
-		
+
 		switch next := self.peek(); next {
 		case 'b':
 			self.eat();
@@ -360,7 +360,7 @@ export struct Lexer {
 	};
 	func number(self: *Lexer, tok: *tokens.Token) {
 		tok.pType = tokens.PTokenType.NUM_LIT;
-		
+
 		p := self.position;
 		self.numDec();
 
@@ -650,5 +650,5 @@ export struct Lexer {
 
 		self.eat();
 		return true;
-	};
+	}
 };
