@@ -7,30 +7,30 @@ import "tokens.vo";
 import "util.vo";
 
 export struct Lexer {
-	buff: *i8; // null terminated
+	buff: vec i8;
 
 	position: i32 = 0;
 	column:   i32 = 0;
 	line:	  i32 = 1;
 
 	func peek(self: *Lexer) i8 {
-		return *(self.buff + self.position);
+		return self.buff[self.position];
 	};
 	func peek16(self: *Lexer) i16 {
-		return *(cast(*i16)(self.buff + self.position));
+		return *(cast(*i16)(self.buff.raw + self.position));
 	};
 	func peek32(self: *Lexer) i32 {
-		return *(cast(*i32)(self.buff + self.position));
+		return *(cast(*i32)(self.buff.raw + self.position));
 	};
-	func eat(self: *Lexer) {
+	func eat(self: *Lexer){
 		++self.position;
 		++self.column;
 	};
-	func eat16(self: *Lexer) {
+	func eat16(self: *Lexer){
 		self.position += sizeof(u16);
 		self.column += sizeof(u16);
 	};
-	func eat32(self: *Lexer) {
+	func eat32(self: *Lexer){
 		self.position += sizeof(u32);
 		self.column += sizeof(u32);
 	};
@@ -56,7 +56,7 @@ export struct Lexer {
 		return c;
 	};
 	func tok(self: *Lexer) tokens.Token {
-		return (tokens.Token){buff: self.buff + self.position, line: self.line, column: self.column};
+		return (tokens.Token){buff: self.buff.raw + self.position, line: self.line, column: self.column};
 	};
 	func prepRead(self: *Lexer) bool {
 		c, c2: i8, i16;
@@ -79,9 +79,11 @@ export struct Lexer {
 		goto loop;
 	};
 	func skipUntilNewline(self: *Lexer) {
-		self.position += 2;
+		self.eat();
+		self.eat();
+
 		for c := self.peek(); c != '\n'; c = self.peek() {
-			++self.position;
+			self.eat();
 		}
 		self.shiftLine();
 	};
@@ -123,7 +125,7 @@ export struct Lexer {
 			return tok;
 		} else if self.prepRead() {
 			tok.pType = tokens.PTokenType.SPACE;
-			tok.len = (self.buff + self.position) - tok.buff;
+			tok.len = (self.buff.raw + self.position) - tok.buff;
 		} else if self.operator(&tok) {
 			return tok;
 		} else if util.isStringDelimiter(c) {
@@ -345,12 +347,12 @@ export struct Lexer {
 		}
 		if !util.isNumDec(c) {
 			p = self.position - 1;
-			tok.buff = self.buff + p;
+			tok.buff = self.buff.raw + p;
 			tok.len = 1;
 			return;
 		} else {
 			p = self.position;
-			tok.buff = self.buff + p;
+			tok.buff = self.buff.raw + p;
 			self.eat();
 			self.numDec();
 		}

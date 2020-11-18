@@ -41,15 +41,27 @@ export func getNextNameSpace() names.NameSpace {
 export func imprt(path: *i8, analyze: *func(*void, ast.File) ast.File, analyzer: *void) i32 {
 	fp: *$FILE = $fopen(path, "r");
 
+	io.print("compiling ");
+	io.println(path);
+
 	len := cast(size_t)$strlen(path);
 
-	path2 := cast(*i8)heap.malloc(len*sizeof(i8));
-	mem.copy(path2, path, len);
-	mem.copy(path2+len, ".c", 2);
+	path2 := cast(*i8)heap.malloc((len + 11)*sizeof(i8));
+	mem.copy(path2, "./_build/", 9);
+	mem.copy(path2+9, path, len);
+	mem.copy(path2+len+9, ".c", 2);
 
 	if fp == null {
-		io.println("fp is null");
-		return 1;
+		path3 := cast(*i8)heap.malloc(sizeof(i8)*(len+6));
+		mem.copy(path3, "./lib/", 6);
+		mem.copy(path3+6, path, len);
+
+		fp = $fopen(path3, "r");
+
+		if fp == null {
+			io.println("fp is null");
+			return 1;
+		}
 	}
 
 	fp2: *$FILE = $fopen(path2, "w");
@@ -59,7 +71,6 @@ export func imprt(path: *i8, analyze: *func(*void, ast.File) ast.File, analyzer:
 		io.println("fp2 is null");
 		return 1;
 	}
-
 	stuff := (vec i8){};
 
 	for c: i32 = $fgetc(fp); c != $EOF; c = $fgetc(fp) {
@@ -68,7 +79,7 @@ export func imprt(path: *i8, analyze: *func(*void, ast.File) ast.File, analyzer:
 	stuff.push(0);
 	$fclose(fp);
 
-	p := parser.NewParser((lexer.Lexer){buff: stuff.raw});
+	p := parser.NewParser((lexer.Lexer){buff: stuff});
 	c := compiler.NewCompiler(0, cast(*func (*void, *i8, u32))(&onData), cast(*void)fp2);
 
 	start: $timeval;
@@ -80,7 +91,7 @@ export func imprt(path: *i8, analyze: *func(*void, ast.File) ast.File, analyzer:
 
 	time := ((cast(u64)end.tv_sec - cast(u64)start.tv_sec) * 1000000) + (cast(u64)end.tv_usec - cast(u64)start.tv_usec);
 
-	$printf("Time taken: %lluus.\n", time);
+	//$printf("Time taken: %lluus.\n", time);
 	$fclose(fp2);
 
 	importedPaths.push(path2);

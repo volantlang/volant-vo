@@ -1,0 +1,40 @@
+export struct CallbackNode {
+    cb:   *func (*void) i32;
+    data: *void;
+    next: *CallbackListNode;
+};
+
+export struct EventLoop {
+    first: *CallbackNode;
+
+    func init(self: EventLoop){
+        self.first = new CallbackNode{
+            cb:   null,
+            data: null,
+            next: null
+        };
+    };
+    func addCallback(self: EventLoop, cb: *func(*void) i32, data: *void){
+        register s := self.first.next;
+
+        self.first.next = new CallbackNode{
+            cb:   cb,
+            data: data,
+            next: s
+        };
+    };
+    func run(self: EventLoop){
+        last := self.first;
+        l := last.next;
+
+        for l != null {
+            if l.cb() != 0 {
+                last = l;
+                l = l.next;
+            } else {
+                last.next = l.next;
+                delete l;
+            }
+        }
+    };
+};

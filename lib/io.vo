@@ -1,0 +1,10 @@
+c_extern putchar: func(i32) i32;
+
+export func println(str: *u8){
+	for c: u8 = *str; c != 0; c = *(++str) {
+		putchar(c);
+	}
+	putchar('\n');
+};
+
+

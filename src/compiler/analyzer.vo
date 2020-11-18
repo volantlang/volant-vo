@@ -267,7 +267,7 @@ export struct Analyzer {
 		mem.copy(path, imprt.path.tok.buff+1, imprt.path.tok.len-2);
 
 		path[imprt.path.tok.len-1] = 0;
-		io.println("here");
+
 		if a := importer.search(path); a != null {
 			self.imports.push(a);
 			return;
@@ -284,9 +284,8 @@ export struct Analyzer {
 			imports:     (vec *Analyzer){},
 			importNames: (vec *ast.IdentExpr){}
 		};
-		io.println("here1");
 		r := importer.imprt(path, cast(* func (*void, ast.File) ast.File)(&a.file), a);
-		io.println("here");
+
 		if r == 1 {
 			self.error("Couldnt import file");
 		}
