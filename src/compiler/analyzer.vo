@@ -596,7 +596,11 @@ export struct Analyzer {
 
 		self.expr(b.left);
 		self.expr(b.right);
-		// self.assert(self.compareTypes(b.left.eType, b.right.eType), "Type mismatch, expected {a.left.eType}, got {b.right.eType}");
+	//	expr.println();
+	//	b.left.eType.println();
+	//	b.right.eType.println();
+
+		self.assert(self.compareTypes(b.left.eType, b.right.eType), "Type mismatch, expected {a.left.eType}, got {b.right.eType}");
 
 		switch b.op.tok.pType {
 		case tokens.PTokenType.RELAT_OP:
@@ -979,6 +983,20 @@ export struct Analyzer {
 				type.buff = t.buff;
 				type.len = t.len;
 			}
+		} else if expr.type == ast.ExprType.MEMBER {
+			an := self.getImportContext((cast(*ast.Expr)type.data.expr.expr).data.member.base);
+
+			if an != null {
+				e := cast(*ast.Expr)type.data.expr.expr;
+				p := cast(*ast.IdentExpr)e.data.member.prop;
+
+				e.buff = p.tok.buff;
+				e.len = p.tok.len;
+				e.type = ast.ExprType.IDENT;
+				an.basicExprTypeExpr(e);
+			}
+		} else {
+			self.error("Invalid type {type}");
 		}
 	};
 	func basicExprTypeExpr(self: *Analyzer, expr: *ast.Expr){
@@ -1140,6 +1158,7 @@ export struct Analyzer {
 		}
 		switch type1.type {
 		case ast.TypeType.BASIC:
+			return type1.len == type2.len && mem.compare(type1.buff, type2.buff, type1.len) == 0;
 		case ast.TypeType.EXPR:
 			return (cast(*ast.Expr)type1.data.expr.expr).len == (cast(*ast.Expr)type2.data.expr.expr).len && mem.compare((cast(*ast.Expr)type1.data.expr.expr).buff, (cast(*ast.Expr)type2.data.expr.expr).buff, (cast(*ast.Expr)type1.data.expr.expr).len) == 0;
 		case ast.TypeType.POINTER:

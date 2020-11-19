@@ -1,6 +1,6 @@
-_build
-test.vo
-run.sh
-a.out
+*.test.vo
 *.swp
 *.swo
+_build
+run.sh
+a.out

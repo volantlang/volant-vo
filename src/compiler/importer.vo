@@ -26,8 +26,7 @@ export func init(){
 };
 
 export func search(path: *i8) *void {
-	i := 0;
-	l := importedPaths.length;
+	i, l := 0, importedPaths.length;
 	for i < l && $strcmp(importedPaths[i], path) != 0 { ++i; }
 	return i == l ? null : importedPaths[i];
 };
@@ -91,7 +90,7 @@ export func imprt(path: *i8, analyze: *func(*void, ast.File) ast.File, analyzer:
 
 	time := ((cast(u64)end.tv_sec - cast(u64)start.tv_sec) * 1000000) + (cast(u64)end.tv_usec - cast(u64)start.tv_usec);
 
-	//$printf("Time taken: %lluus.\n", time);
+	//$printf("time taken: %lluus.\n", time);
 	$fclose(fp2);
 
 	importedPaths.push(path2);
