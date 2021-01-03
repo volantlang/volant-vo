@@ -40,19 +40,19 @@ export func isWhitespace(c: u8) bool {
 	return c == ' ' || c == '\t' || c == '\r';
 };
 
-func strcomp(a: *i8, b: *i8, l: size_t) bool {
+export func strcmpx(a: *i8, b: *i8, l: size_t) bool {
 	for *a != 0 && *(a++) == *(b++) && (--l) != 0 {}
 	return *a == 0 && l == 0;
 };
 
 export func findKeyword(c: *i8, l: size_t) u16 {
 	word, i := tokens.Keywords[0], cast(u16)1;
-	for ;i != tokens.KeywordsNum && !strcomp(word, c, l); word = tokens.Keywords[i++] {}
+	for ;i != tokens.KeywordsNum && !strcmpx(word, c, l); word = tokens.Keywords[i++] {}
 	return i;
 };
 
 export func findType(c: *i8, l: size_t) u16 {
 	word, i := tokens.Types[0], cast(u16)1;
-	for ;i != tokens.TypesNum && !strcomp(word, c, l); word = tokens.Types[i++] {}
+	for ;i != tokens.TypesNum && !strcmpx(word, c, l); word = tokens.Types[i++] {}
 	return i;
 };

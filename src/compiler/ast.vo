@@ -564,18 +564,24 @@ export struct Pattern {
 	..tokens.Base;
 };
 
+export struct NamespaceAndType {
+	name: names.NameSpace;
+	type: *Type;
+};
+
 export struct GlobalStmt {
 	stmt:     *Stmt;
 	exported: bool;
 };
 
 export struct File {
-	imprts:  vec *Stmt;
-	decs:     vec GlobalStmt;
-	funcs:    vec GlobalStmt;
-	tdefs:    vec GlobalStmt;
-	tmplates: vec GlobalStmt;
-	___cs:    vec *Stmt;
+	imprts:    vec *Stmt;
+	decs:      vec GlobalStmt;
+	funcs:     vec GlobalStmt;
+	tdefs:     vec GlobalStmt;
+	tmplates:  vec GlobalStmt;
+	___cs:     vec *Stmt;
+	namespace: names.NameSpace;
 };
 export func NewFile() File {
 	return (File){

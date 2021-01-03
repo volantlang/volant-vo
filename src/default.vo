@@ -1,0 +1,4 @@
+export null := cast(*void)0;
+export true := cast(bool)1;
+export false := cast(bool)0;
+

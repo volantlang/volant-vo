@@ -1374,7 +1374,7 @@ export struct Parser {
 			return self.expr10();
 		}
 	};
-	func expr10(self: *Parser) *ast.Expr { // posifix ++, --, function call, element, generic call
+	func expr10(self: *Parser) *ast.Expr { // posifix ++, --, function call, element, member, generic call
 		state := self.state();
 		e := self.expr11();
 		x: *ast.Expr;
@@ -1412,6 +1412,16 @@ export struct Parser {
 			goto loop;
 		case tokens.STokenType.LNOT:
 			e = self.genCallExpr(e, state);
+			goto loop;
+		case tokens.STokenType.DOT:
+			self.eat();
+			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
+			self.eat();
+
+			x = self.exprNode(state);
+			x.type = ast.ExprType.MEMBER;
+			x.data.member = (ast.MemberExpr){base: e, prop: prop};
+			e = x;
 			goto loop;
 		default:
 			return e;
@@ -1453,25 +1463,7 @@ export struct Parser {
 		ee.data.compLit = c;
 		return ee;
 	};
-	func expr12(self: *Parser) *ast.Expr { // member
-		state := self.state();
-		e := self.expr13();
-		x := e;
-
-		for self.peek().sType == tokens.STokenType.DOT {
-			self.eat();
-
-			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
-			self.eat();
-
-			x = self.exprNode(state);
-			x.type = ast.ExprType.MEMBER;
-			x.data.member = (ast.MemberExpr){base: e, prop: prop};
-			e = x;
-		}
-		return x;
-	};
-	func expr13(self: *Parser) *ast.Expr {
+	func expr12(self: *Parser) *ast.Expr {
 		state := self.state();
 		tok := self.peek();
 		expr: *ast.Expr;
@@ -2012,6 +2004,24 @@ export struct Parser {
 		}
 		return type;
 	};
+	func exprx(self: *Parser) *ast.Expr { // member
+		state := self.state();
+		e := self.expr12();
+		x := e;
+
+		for self.peek().sType == tokens.STokenType.DOT {
+			self.eat();
+
+			prop := new ast.IdentExpr{self.expectPri(tokens.PTokenType.IDENT)};
+			self.eat();
+
+			x = self.exprNode(state);
+			x.type = ast.ExprType.MEMBER;
+			x.data.member = (ast.MemberExpr){base: e, prop: prop};
+			e = x;
+		}
+		return x;
+	};
 	func type3(self: *Parser) *ast.Type { // function, struct, tuple, enum, parenthesis, basic, expr type
 		tok := self.peek();
 
@@ -2043,7 +2053,7 @@ export struct Parser {
 			break;
 		}
 		state := self.state();
-		expr := self.expr12();
+		expr := self.exprx();
 
 		if self.peek().sType == tokens.STokenType.LNOT {
 			return self.genCallType(expr, state);

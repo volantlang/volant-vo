@@ -80,7 +80,7 @@ func NewCompilerContext() CompilerContext {
 
 typedef BuffCb *func(*void, *i8, u32);
 
-struct Buff {
+export struct Buff {
 	raw: [0x100]i8;
 	length: u32;
 
@@ -184,7 +184,6 @@ struct Buff {
 		case 0x03: *m++ = *s++;
 		case 0x02: *m++ = *s++;
 		case 0x01: *m++ = *s++;
-		default: break;
 		}
 
 		m2 := cast(*i8)(m);
@@ -198,7 +197,6 @@ struct Buff {
 		case 3: *m2++ = *s2++;
 		case 2: *m2++ = *s2++;
 		case 1: *m2++ = *s2++;
-		default: break;
 		}
 		self.length += extras;
 	};
@@ -308,6 +306,14 @@ export struct Compiler {
 		self.append(cast(*i8)lit.buff, lit.len);
 	};
 	func file(self: *Compiler, file: ast.File) {
+		self.append("#ifndef H_VO_", 13);
+		self.append(file.namespace.buff, file.namespace.len);
+		self.newline();
+
+		self.append("#define H_VO_", 13);
+		self.append(file.namespace.buff, file.namespace.len);
+		self.newline();
+
 		self.append("#include \"internal/default.h\"\n", 30);
 		i: i32;
 
@@ -349,6 +355,8 @@ export struct Compiler {
 		for i = 0; i < file.funcs.length; ++i {
 			self.globalFuncDec2(file.funcs[i].stmt.data.funcDec);
 		}
+
+		self.append("#endif", 6);
 		self.buff.checkNFlush();
 	};
 	func imprt(self: *Compiler, imprt: ast.Import){
@@ -419,7 +427,7 @@ export struct Compiler {
 			if s.type != ast.StmtType.FUNC {
 				continue;
 			}
-			self.funcDecNoBlock(s.data.funcDec);
+			self.funcDecNoBlockNIdent(s.data.funcDec, strct.name);
 			self.semicolon();
 			self.newline();
 		}
@@ -445,7 +453,7 @@ export struct Compiler {
 			s := strct.props[i];
 			switch s.type {
 			case ast.StmtType.FUNC:
-				self.funcDec(s.data.funcDec);
+				self.funcDecNIdent(s.data.funcDec, strct.name);
 				break;
 			case ast.StmtType.TEMPLATE:
 				self.tmplate(s.data.tmplate);
@@ -747,8 +755,15 @@ export struct Compiler {
 	func funcDecNoBlock(self: *Compiler, dec: ast.FuncDec){
 		self.funcDecType(dec.type.data.fnc, dec.name);
 	};
+	func funcDecNoBlockNIdent(self: *Compiler, dec: ast.FuncDec, ident: *ast.IdentExpr){
+		self.funcDecTypeNIdent(dec.type.data.fnc, dec.name, ident);
+	};
 	func funcDec(self: *Compiler, dec: ast.FuncDec){
 		self.funcDecNoBlock(dec);
+		self.funcBody(dec.body, dec.type.data.fnc);
+	};
+	func funcDecNIdent(self: *Compiler, dec: ast.FuncDec, ident: *ast.IdentExpr){
+		self.funcDecNoBlockNIdent(dec, ident);
 		self.funcBody(dec.body, dec.type.data.fnc);
 	};
 	func blockNoBrace(self: *Compiler, block: ast.Block){
@@ -1278,6 +1293,13 @@ export struct Compiler {
 			break;
 		case ast.TypeType.FUNC:
 			if cast(ast.FuncTypeEnum2)expr.eType.data.fnc.type2 == ast.FuncTypeEnum2.NATIVE {
+				t := (cast(*ast.Expr)(expr.data.member.base)).eType;
+
+				if t.type == ast.TypeType.POINTER {
+					t = t.data.pointer.base;
+				}
+				self.ident(t.data.strct.name);
+				self.push('_');
 				break;
 			}
 		default:
@@ -1339,9 +1361,9 @@ export struct Compiler {
 
 			self.newline();
 			self.indent();
-			self.append("v0__Arguments ", 14);
+			self.append("v0_Arguments ", 13);
 			self.ident(type.varargs);
-			self.append(" = (v0__Arguments){.p_length = i_lll};", 38);
+			self.append(" = (v0_Arguments){.p_length = i_lll};", 37);
 			self.newline();
 			self.indent();
 			self.append("va_start(", 9);
@@ -1775,6 +1797,16 @@ export struct Compiler {
 		ctx := (TypeContext){buf: (vec i8){}};
 		self.funcType(fnc, &ctx);
 		self.append(ctx.buf.raw, ctx.bottom);
+		self.ident(ident);
+		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
+		ctx.buf.free();
+	};
+	func funcDecTypeNIdent(self: *Compiler, fnc: ast.FuncType, ident: *ast.IdentExpr, ident2: *ast.IdentExpr){
+		ctx := (TypeContext){buf: (vec i8){}};
+		self.funcType(fnc, &ctx);
+		self.append(ctx.buf.raw, ctx.bottom);
+		self.ident(ident2);
+		self.push('_');
 		self.ident(ident);
 		self.append(ctx.buf.raw + ctx.bottom, ctx.buf.length - ctx.bottom);
 		ctx.buf.free();

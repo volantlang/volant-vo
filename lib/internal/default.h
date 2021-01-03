@@ -2,6 +2,7 @@
 #define VO_DEFAULT
 
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include "heap.h"
 #include "types.h"
