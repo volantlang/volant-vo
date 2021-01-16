@@ -2,3 +2,29 @@ export null := cast(*void)0;
 export true := cast(bool)1;
 export false := cast(bool)0;
 
+__c {`typedef va_list v1_va_list`};
+
+typedef va_list va_list;
+
+export struct Arguments {
+	list: va_list;
+	length: i32;
+
+	template next(T) func (self: *Arguments) T {
+		register val: T;
+		__c { val` = va_arg(`self.list`, v1_T);` };
+		return val;
+	};
+};
+/*
+export struct Arguments {
+	list: va_list;
+	length: i32;
+};
+
+func inline (self: *Arguments) template(T) next() T {
+	register val: T;
+	__c { val` = va_arg(`self.list`, `T`):` };
+	return val;
+};
+*/

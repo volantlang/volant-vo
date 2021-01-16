@@ -886,13 +886,19 @@ export struct Analyzer {
 		if type.type == ast.TypeType.POINTER {
 			type = type.data.pointer.base;
 		}
+		if type.type == ast.TypeType.GENCALL {
+			genCall := *cast(*ast.GenCall)&type.data.genCall;
+			tmplate := *cast(*ast.TemplateType)&genCall.expr.eType.data.tmplate;
 
+			type = tmplate.datas[genCall.index].type;
+		}
 		type = self.getRootType(type);
 
 		switch type.type {
 		case ast.TypeType.STRUCT:
 			goto strctProp;
 		default:
+			expr.println();
 			self.error("meh");
 			break;
 		}
@@ -952,12 +958,12 @@ export struct Analyzer {
 		}
 		ee := deepcopy.copyExpr(tmplate.data.expr);
 
+		args.push(cast(vec *ast.Type)expr.data.genCall.types);
+		tmplate.datas.push((ast.TypeExprUnion){expr: ee});
+
 		self.expr(ee);
 		expr.eType = (ee).eType;
 		self.popScope();
-
-		args.push(cast(vec *ast.Type)expr.data.genCall.types);
-		tmplate.datas.push((ast.TypeExprUnion){expr: ee});
 	};
 	func funcExpr(self: *Analyzer, expr: *ast.Expr){
 		fnc := cast(*ast.FuncExpr)(&expr.data.funcExpr);
@@ -1001,7 +1007,6 @@ export struct Analyzer {
 		args := tmplate.args;
 
 		self.assert(tmplate.type == ast.TypeExprEnum.TYPE, "bruh genCallType()");
-
 		types := cast(vec *ast.Type)type.data.genCall.types;
 
 		i := 0;
@@ -1019,14 +1024,13 @@ export struct Analyzer {
 			t.labl = 1;
 			self.addType(params[i].tok.buff, params[i].tok.len, t);
 		}
-
 		tt := deepcopy.copyType(tmplate.data.type);
-		self.type(tt);
-
-		self.popScope();
 
 		args.push(cast(vec *ast.Type)type.data.genCall.types);
-		tmplate.datas.push((ast.TypeExprUnion){type: tt});
+		tmplate.datas.push((ast.TypeExprUnion){ type: tt });
+
+		self.type(tt);
+		self.popScope();
 	};
 	func normalizeType(self: *Analyzer, type: *ast.Type) *ast.Type {
 		switch type.type {
@@ -1089,6 +1093,7 @@ export struct Analyzer {
 					type.buff = t.buff;
 					type.len = t.len;
 				}
+				type.println();
 				return;
 			}
 			for i := 0; i < self.unnamedImports.length; ++i {
@@ -1220,7 +1225,7 @@ export struct Analyzer {
 			for i := 0; i < fnc.args.names.length; ++i {
 				ident = &fnc.args.names[i];
 				type = fnc.args.types[i];
-	//			type.println();
+
 				self.type(type);
 				self.ident(ident);
 				self.addVar(ident.tok.buff, ident.tok.len, type);

@@ -127,7 +127,12 @@ export struct Copier {
 		}
 		i.conds = self.exprVec(ifElse.conds);
 		i.blocks = self.blockVec(ifElse.blocks);
-		i.elseBlock = self.block(ifElse.elseBlock);
+
+		if ifElse.elseBlock.stmts != null {
+			i.elseBlock = self.block(ifElse.elseBlock);
+		} else {
+			i.elseBlock.stmts = null;
+		}
 		return i;
 	};
 	func rturn(self: *Copier, rturn: ast.Return) ast.Return {
@@ -249,7 +254,7 @@ export struct Copier {
 		return (ast.IsExpr){expr: self.expr(isExpr.expr), pattern: self.pattern(isExpr.pattern)};
 	};
 	func callExpr(self: *Copier, callExpr: ast.CallExpr) ast.CallExpr {
-		return (ast.CallExpr){function: self.expr(callExpr.function), args: self.exprVec(callExpr.args)};
+		return (ast.CallExpr){function: self.expr(callExpr.function), args: callExpr.args != null ? self.exprVec(callExpr.args) : null};
 	};
 	func castExpr(self: *Copier, castExpr: ast.CastExpr) ast.CastExpr {
 		return (ast.CastExpr){expr: self.expr(castExpr.expr), type: self.type(castExpr.type)};
@@ -300,6 +305,9 @@ export struct Copier {
 		case ast.TypeType.STRUCT:
 			t.data.strct = self.strct(type.data.strct);
 			break;
+		case ast.TypeType.GENCALL:
+			t.data.genCall = self.genCall(type.data.genCall);
+			break;
 		default:
 			break;
 		}
@@ -327,7 +335,8 @@ export struct Copier {
 		return (ast.PointerType){base: self.type(pointer.base)};
 	};
 	func strct(self: *Copier, strct: ast.StructType) ast.StructType {
-		return (ast.StructType){props: self.stmtVec(strct.props), superStructs: self.exprVec(strct.superStructs)};
+		props := self.stmtVec(strct.props);
+		return (ast.StructType){props: props, superStructs: self.exprVec(strct.superStructs)};
 	};
 	func pattern(self: *Copier, pattern: *ast.Pattern) *ast.Pattern {
 		return pattern;

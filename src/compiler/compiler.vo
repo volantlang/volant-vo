@@ -1361,9 +1361,9 @@ export struct Compiler {
 
 			self.newline();
 			self.indent();
-			self.append("v0_Arguments ", 13);
+			self.append("v1_Arguments ", 13);
 			self.ident(type.varargs);
-			self.append(" = (v0_Arguments){.p_length = i_lll};", 37);
+			self.append(" = (v1_Arguments){.p_length = i_lll};", 37);
 			self.newline();
 			self.indent();
 			self.append("va_start(", 9);
