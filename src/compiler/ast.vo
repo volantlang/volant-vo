@@ -320,6 +320,7 @@ export struct Type {
 	type: TypeType;
 	data: TypeUnion;
 	labl: u8;
+	id: i64;
 	..tokens.Base;
 };
 
@@ -464,6 +465,39 @@ export struct ExprStmt {
 	expr: *Expr;
 };
 
+export struct FuncTemplate {
+	typeArgs: vec *Type;
+	fncType:  *Type;
+	body:     Block;
+};
+
+export struct Method {
+	self:     *Expr;
+	selfType: *Type;
+	fncType:  *Type;
+	body:     Block;
+};
+
+export struct MethodTemplate {
+	self:     *Expr;
+	selfType: *Type;
+	typeArgs: vec *Type;
+	fncType:  *Type;
+	body:    Block;
+};
+
+/*
+export struct TemplateMethodTemplate {
+	self:       *Expr;
+	selfType:   *Type;
+	typeArgs:   vec *Type;
+	fncType:    *Type;
+	body:       Block;
+};
+
+export struct Template {
+
+*/
 export struct Template {
 	name: *IdentExpr;
 	type: *Type;
@@ -498,6 +532,11 @@ export struct Stmt {
 	type: StmtType;
 	data: StmtUnion;
 	..tokens.Base;
+};
+
+export struct ExportableStmt {
+	stmt:     *Stmt;
+	exported: bool;
 };
 
 // Pattern
@@ -569,26 +608,22 @@ export struct NamespaceAndType {
 	type: *Type;
 };
 
-export struct GlobalStmt {
-	stmt:     *Stmt;
-	exported: bool;
-};
-
 export struct File {
 	imprts:    vec *Stmt;
-	decs:      vec GlobalStmt;
-	funcs:     vec GlobalStmt;
-	tdefs:     vec GlobalStmt;
-	tmplates:  vec GlobalStmt;
+	decs:      vec ExportableStmt;
+	funcs:     vec ExportableStmt;
+	tdefs:     vec ExportableStmt;
+	tmplates:  vec ExportableStmt;
+	methods:   vec ExportableStmt;
 	___cs:     vec *Stmt;
 	namespace: names.NameSpace;
 };
 export func NewFile() File {
 	return (File){
-		decs:     (vec GlobalStmt){},
-		funcs:    (vec GlobalStmt){},
-		tdefs:    (vec GlobalStmt){},
-		tmplates: (vec GlobalStmt){},
+		decs:     (vec ExportableStmt){},
+		funcs:    (vec ExportableStmt){},
+		tdefs:    (vec ExportableStmt){},
+		tmplates: (vec ExportableStmt){},
 		___cs:    (vec *Stmt){},
 		imprts:   (vec *Stmt){}
 	};

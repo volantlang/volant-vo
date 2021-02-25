@@ -3,6 +3,237 @@ import "tokens.vo";
 import "mem.vo";
 import "io.vo";
 
+/*
+func ccc(chr: i8) u32 {
+	if chr <= '9' {
+		return chr - '0' + 1;
+	} else if chr <= 'Z' {
+		return (chr - 'A') + '0' + 1;
+	} else if chr == '_' {
+		return (chr - '_') + ccc('Z') + 1;
+	} else if {
+		return (chr - 'z') + ccc('_') + 1;
+	}
+};
+
+func hash1(buf: *i8, len: u32) u32 {
+	p: const i32 = 67;
+	m: const i32 = 0x100;
+
+	val: u64 = 0;
+	p_pow: u64 = 1;
+
+	for i: u32 = 0; i < len; ++i {
+		val = (val + ccc(buf[i]) * p_pow) % m;
+	}
+	return val;
+};
+
+func hash2(buf: *i8, len: u32) u64 {
+	p: const i32 = 67;
+	m: const i32 = 1_000_000_009;
+
+	val: u64 = 0;
+	p_pow: u64 = 1;
+
+	for i: u32 = 0; i < len; ++i {
+		val = (val + ccc(buf[i]) * p_pow) % m;
+	}
+	return val;
+};
+
+export struct Node {
+	key:   u64;
+	type:  *ast.Type;
+};
+
+export struct HashTable {
+	data: [0x100]Node;
+
+	func init(self: *HashTable){
+		mem.set(cast(*void)self.data, 0, sizeof(self.data));
+	};
+	func insert(self: *HashTable, buf: *i8, len: u32, type: *ast.Type){
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index].key != 0 {
+			index++;
+			index = index % 0x100;
+		}
+		self.data[index] = (Node){key: key, type: type};
+	};
+	func del(self: *HashTable, buf: *i8, len: u32) *ast.Type {
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index].key != 0 {
+			if self.data[index].key == key {
+				temp := self.data[index];
+
+				self.data[index] = (Node){key: 0, type: null};
+				return temp.type;
+			}
+			index++;
+			index = index % 0x100;
+		}
+		return null;
+	};
+	func find(self: *HashTable, buf: *i8, len: u32) *ast.Type {
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index].key != 0 {
+			if self.data[index].key == key {
+				return self.data[index].type;
+			}
+			index++;
+			index = index % 0x100;
+		}
+		return null;
+	};
+};
+
+export struct EmptyHashTable {
+	data: [0x100]u64;
+
+	func init(self: *EmptyHashTable){
+		mem.set(cast(*void)self.data, 0, sizeof(self.data));
+	};
+	func insert(self: *EmptyHashTable, buf: *i8, len: u32){
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index] != 0 {
+			index++;
+			index = index % 0x100;
+		}
+		self.data[index] = key;
+	};
+	func del(self: *EmptyHashTable, buf: *i8, len: u32) u64 {
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index] != 0 {
+			if self.data[index] == key {
+				temp := self.data[index];
+
+				self.data[index] = 0;
+				return temp;
+			}
+			index++;
+			index = index % 0x100;
+		}
+		return 0;
+	};
+	func find(self: *EmptyHashTable, buf: *i8, len: u32) u64 {
+		index := hash1(buf, len);
+		key := hash2(buf, len);
+
+		for self.data[index] != 0 {
+			if self.data[index] == key {
+				return self.data[index];
+			}
+			index++;
+			index = index % 0x100;
+		}
+		return 0;
+	};
+};
+
+export struct SymbolTable {
+	vars:   HashTable;
+	types:  HashTable;
+	labels: EmptyHashTable;
+
+	parent:   *SymbolTable;
+	children: vec *SymbolTable;
+
+	func addVar(self: *SymbolTable, name: *i8, len: u32, type: *ast.Type){
+		self.vars.insert(name, len, type);
+	};
+	func getVarInCurr(self: *SymbolTable, name: *i8, len: u32) *ast.Type {
+		return self.vars.find(name, len);
+	};
+	func getVar(self: *SymbolTable, name: *i8, len: u32) *ast.Type {
+		table := self;
+
+		for table != null {
+			v := table.getVarInCurr(name, len);
+
+			if v != null {
+				return v;
+			}
+			table = table.parent;
+		}
+		return null;
+	};
+	func addType(self: *SymbolTable, name: *i8, len: u32, type: *ast.Type){
+		self.types.insert(name, len, type);
+	};
+	func getTypeInCurr(self: *SymbolTable, name: *i8, len: u32) *ast.Type {
+		return self.types.find(name, len);
+	};
+	func getType(self: *SymbolTable, name: *i8, len: u32) *ast.Type {
+		table := self;
+
+		for table != null {
+			v := table.getTypeInCurr(name, len);
+
+			if v != null {
+				return v;
+			}
+			table = table.parent;
+		}
+		return null;
+	};
+
+	func addLabel(self: *SymbolTable, name: *i8, len: u32){
+		self.labels.insert(name, len);
+	};
+	func getLabelInCurr(self: *SymbolTable, name: *i8, len: u32) bool {
+		return self.labels.find(name, len) != 0;
+	};
+	func getLabel(self: *SymbolTable, name: *i8, len: u32) bool {
+		table := self;
+
+		for table != null {
+			v := table.getLabelInCurr(name, len);
+
+			if v {
+				return v;
+			}
+			table = table.parent;
+		}
+		return false;
+	};
+	func newChild(self: *SymbolTable) *SymbolTable {
+		s := new (SymbolTable){
+			parent: self,
+			children: (vec *SymbolTable){}
+		};
+
+		s.vars.init();
+		s.types.init();
+		s.labels.init();
+
+		self.children.push(s);
+		return s;
+	}
+};
+
+export func NewSymbolTable(parent: *SymbolTable) *SymbolTable {
+	s := new SymbolTable {
+		parent: parent,
+		children: (vec *SymbolTable){}
+	};
+	s.vars.init();
+	s.types.init();
+	s.labels.init();
+	return s;
+};
+*/
+
 export struct BufSOA {
 	ptrs: vec *i8;
 	lens: vec size_t;
@@ -17,6 +248,11 @@ export func NewBufSOA() BufSOA {
 export struct NodeSOA {
 	idents: BufSOA;
 	types:  vec *ast.Type;
+};
+
+export struct TypeNodeSOA {
+	basic_nodes: NodeSOA;
+	ids:        u64;
 };
 
 export func NewNodeSOA() NodeSOA {
@@ -121,3 +357,4 @@ export func NewSymbolTable(parent: *SymbolTable) *SymbolTable {
 		children:  (vec *SymbolTable){}
 	};
 };
+

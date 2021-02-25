@@ -14,16 +14,22 @@ func onData(fp: *$FILE, str: *i8, len: u32){
 	$fwrite(str, len, sizeof(i8), fp);
 };
 
-time: $timeval;
+time: u64;
 importedPaths:         vec *i8;
 importedPathsContexts: vec *void;
 
 files: vec ast.File;
 lastNum: u32;
 
-export func init(){
+func getTime() u64 {
+	time: $timeval;
 	$gettimeofday(&time, null);
 
+	return cast(u64)time.tv_usec;
+};
+
+export func init(){
+	time                  = 0;
 	files                 = (vec ast.File){};
 	importedPaths         = (vec *i8){};
 	importedPathsContexts = (vec *void){};
@@ -99,8 +105,8 @@ export func search(path1: *i8, len1: size_t, path2: *i8, len2: size_t, pathf: **
 };
 
 export func read(parentPath: *i8, parentPathLen: size_t, path: *i8, pathLen: size_t, newPathPtr: **i8, newLenPtr: *size_t) *void {
-	io.print("compiling ");
-	io.printnln(path, pathLen);
+//	io.print("compiling ");
+//	io.printnln(path, pathLen);
 
 	newPath: *i8;
 	newLen: size_t;
@@ -132,15 +138,27 @@ export func read(parentPath: *i8, parentPathLen: size_t, path: *i8, pathLen: siz
 	return cast(*void)stuff;
 };
 
-export func compile(data: *void, path: *i8, preImports: *func(*void, ast.File) ast.File, postImports: *func(*void, ast.File), analyzer: *void){
+export func compile(data: *void, path: *i8, preImports: *func(*void, ast.File) ast.File, imports: *func(*void, ast.File), postImports: *func(*void, ast.File), analyzer: *void){
+	t1 := getTime();
+
 	p := parser.NewParser((lexer.Lexer){buff: cast(vec i8)data });
 	file := (*preImports)(analyzer, p.file());
+
+	t2 := getTime();
+	time += t2 - t1;
 
 	importedPaths.push(path);
 	importedPathsContexts.push(analyzer);
 	files.push(file);
 
+	(*imports)(analyzer, file);
+
+	t1 = getTime();
+
 	(*postImports)(analyzer, file);
+
+	t2 = getTime();
+	time += t2 - t1;
 };
 
 export func close() i32 {
@@ -174,17 +192,18 @@ export func close() i32 {
 		}
 		c.buff.data = fp;
 
+		t1 := getTime();
+
 		c.file(files[i]);
+
+		t2 := getTime();
+		time += t2 - t1;
 
 		$fclose(fp);
 		c.reset();
 	}
-	t: $timeval;
-	$gettimeofday(&t, null);
 
-	t2 := (cast(u64)(t.tv_sec - time.tv_sec))*1000000 + cast(u64)(t.tv_usec - time.tv_usec);
-
-	$printf("time taken: %lums\n", t2/1000);
+	$printf("time taken: %luus\n", time);
 	c.free();
 	return 0;
 };

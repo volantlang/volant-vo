@@ -66,7 +66,8 @@ export struct Parser {
 			line:   state.line,
 			column: state.column,
 			buff:   state.buff,
-			len:	cast(i32)(self.current.buff - state.buff)
+			len:	cast(i32)(self.current.buff - state.buff),
+			id: 0
 		};
 	};
 	func patternNode(self: *Parser, state: ParserState) *ast.Pattern {
@@ -158,22 +159,22 @@ export struct Parser {
 				file.imprts.push(self.imprt());
 				goto next;
 			case tokens.STokenType.STRUCT:
-				file.tdefs.push((ast.GlobalStmt){exported: false, stmt: self.structTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: false, stmt: self.structTypedef()});
 				goto next;
 			case tokens.STokenType.UNION:
-				file.tdefs.push((ast.GlobalStmt){exported: false, stmt: self.unionTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: false, stmt: self.unionTypedef()});
 				goto next;
 			case tokens.STokenType.ENUM:
-				file.tdefs.push((ast.GlobalStmt){exported: false, stmt: self.enumTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: false, stmt: self.enumTypedef()});
 				goto next;
 			case tokens.STokenType.TYPEDEF:
-				file.tdefs.push((ast.GlobalStmt){exported: false, stmt: self.tdef()});
+				file.tdefs.push((ast.ExportableStmt){exported: false, stmt: self.tdef()});
 				goto next;
 			case tokens.STokenType.FUNC:
-				file.funcs.push((ast.GlobalStmt){exported: false, stmt: self.funcDec()});
+				file.funcs.push((ast.ExportableStmt){exported: false, stmt: self.funcDec()});
 				goto next;
 			case tokens.STokenType.TEMPLATE:
-				file.tmplates.push((ast.GlobalStmt){exported: false, stmt: self.tmplate()});
+				file.tmplates.push((ast.ExportableStmt){exported: false, stmt: self.tmplate()});
 				goto next;
 			case tokens.STokenType.__C:
 				file.___cs.push(self.___c());
@@ -183,7 +184,7 @@ export struct Parser {
 			case tokens.STokenType.AUTO:
 			case tokens.STokenType.EXTERN:
 			case tokens.STokenType.C_EXTERN:
-				file.decs.push((ast.GlobalStmt){exported: false, stmt: self.dec()});
+				file.decs.push((ast.ExportableStmt){exported: false, stmt: self.dec()});
 				goto next;
 			case tokens.STokenType.EXPORT:
 				self.eat();
@@ -194,7 +195,7 @@ export struct Parser {
 			}
 			switch tok.pType {
 			case tokens.PTokenType.IDENT:
-				file.decs.push((ast.GlobalStmt){exported: false, stmt: self.dec()});
+				file.decs.push((ast.ExportableStmt){exported: false, stmt: self.dec()});
 				goto next;
 			case tokens.PTokenType.EOF:
 				goto out;
@@ -205,36 +206,36 @@ export struct Parser {
 		label exprt:
 			switch tok.sType {
 			case tokens.STokenType.TEMPLATE:
-				file.tmplates.push((ast.GlobalStmt){exported: true, stmt: self.tmplate()});
+				file.tmplates.push((ast.ExportableStmt){exported: true, stmt: self.tmplate()});
 				goto next;
 			case tokens.STokenType.TYPEDEF:
-				file.tdefs.push((ast.GlobalStmt){exported: true, stmt: self.tdef()});
+				file.tdefs.push((ast.ExportableStmt){exported: true, stmt: self.tdef()});
 				goto next;
 			case tokens.STokenType.STRUCT:
-				file.tdefs.push((ast.GlobalStmt){exported: true, stmt: self.structTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: true, stmt: self.structTypedef()});
 				goto next;
 			case tokens.STokenType.UNION:
-				file.tdefs.push((ast.GlobalStmt){exported: true, stmt: self.unionTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: true, stmt: self.unionTypedef()});
 				goto next;
 			case tokens.STokenType.ENUM:
-				file.tdefs.push((ast.GlobalStmt){exported: true, stmt: self.enumTypedef()});
+				file.tdefs.push((ast.ExportableStmt){exported: true, stmt: self.enumTypedef()});
 				goto next;
 			case tokens.STokenType.FUNC:
-				file.funcs.push((ast.GlobalStmt){exported: true, stmt: self.funcDec()});
+				file.funcs.push((ast.ExportableStmt){exported: true, stmt: self.funcDec()});
 				goto next;
 			case tokens.STokenType.STATIC:
 			case tokens.STokenType.REGISTER:
 			case tokens.STokenType.AUTO:
 			case tokens.STokenType.EXTERN:
 			case tokens.STokenType.C_EXTERN:
-				file.decs.push((ast.GlobalStmt){exported: true, stmt: self.dec()});
+				file.decs.push((ast.ExportableStmt){exported: true, stmt: self.dec()});
 				goto next;
 			default:
 				break;
 			}
 			switch tok.pType {
 			case tokens.PTokenType.IDENT:
-				file.decs.push((ast.GlobalStmt){exported: true, stmt: self.dec()});
+				file.decs.push((ast.ExportableStmt){exported: true, stmt: self.dec()});
 				break;
 			default:
 				self.error("unexpected token {tok}.");
@@ -2028,6 +2029,8 @@ export struct Parser {
 		switch tok.sType {
 		case tokens.STokenType.FUNC:
 			return self.funcType();
+		case tokens.STokenType.STRUCT:
+			return self.structType();
 		default:
 			break;
 		}

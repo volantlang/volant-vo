@@ -19,7 +19,7 @@ func main(len: i32, args: **i8) i32 {
 	r := importer.read("a", 1, path, ll, &p, &l);
 
 	if r != null {
-		importer.compile(r, path, cast(* func(*void, ast.File) ast.File)(&a.preImports), cast(*func(*void, ast.File))(&a.postImports), cast(*void)&a);
+		importer.compile(r, path, cast(* func(*void, ast.File) ast.File)(&a.preImports), cast(*func(*void, ast.File))(&a.imports_), cast(*func(*void, ast.File))(&a.postImports), cast(*void)&a);
 		return importer.close();
 	} else {
 		return 1;

@@ -231,13 +231,15 @@ export struct Analyzer {
 		}
 		return file;
 	};
-	func postImports(self: *Analyzer, file: ast.File) {
-		i: i32;
-
-		for i = 0; i < file.imprts.length; ++i {
+	func imports_(self: *Analyzer, file: ast.File) {
+		for i: i32 = 0; i < file.imprts.length; ++i {
 			s := file.imprts[i];
 			self.imprt(s.data.imprt);
 		}
+	};
+	func postImports(self: *Analyzer, file: ast.File) {
+		i: i32;
+
 		for i = 0; i < file.tdefs.length; ++i {
 			s := file.tdefs[i];
 			self.tdefNoAdd(s.stmt.data.tdef);
@@ -351,7 +353,7 @@ export struct Analyzer {
 		a.path.buff = path;
 		a.path.len = len;
 
-		importer.compile(data, path, cast(*func(*void, ast.File) ast.File)(&a.preImports), cast(*func(*void, ast.File))(&a.postImports), cast(*void)a);
+		importer.compile(data, path, cast(*func(*void, ast.File) ast.File)(&a.preImports), cast(*func(*void, ast.File))(&a.imports_), cast(*func(*void, ast.File))(&a.postImports), cast(*void)a);
 		goto nextNext;
 
 	label next:
@@ -1092,9 +1094,12 @@ export struct Analyzer {
 					type.data = t.data;
 					type.buff = t.buff;
 					type.len = t.len;
+					type.id = t.id;
 				}
-				type.println();
+				// type.println();
 				return;
+			} else {
+				// io.println("hehehhehehehehehhehehehehhe");
 			}
 			for i := 0; i < self.unnamedImports.length; ++i {
 				an := self.unnamedImports[i];
@@ -1253,7 +1258,8 @@ export struct Analyzer {
 	func pointerToType(self: *Analyzer, type: *ast.Type) *ast.Type {
 		t := new ast.Type{
 			type: ast.TypeType.POINTER,
-			data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}}
+			data: (ast.TypeUnion){pointer: (ast.PointerType){base: type}},
+			id: 0
 		};
 		self.heap.push(t);
 		return t;
@@ -1319,21 +1325,50 @@ export struct Analyzer {
 		return (ast.NamespaceAndType){name: 0, type: null};
 	};
 	func compareTypes(self: *Analyzer, type1: *ast.Type, type2: *ast.Type) bool {
+		if type1 == type2 {
+			return true;
+		}
+		if type1.id != 0 && type1.id == type2.id {
+			return true;
+		}
 		if type1.type != type2.type {
 			return false;
 		}
+		v: bool;
+
 		switch type1.type {
 		case ast.TypeType.BASIC:
-			return type1.len == type2.len && mem.compare(type1.buff, type2.buff, type1.len) == 0;
+			v = type1.len == type2.len && mem.compare(type1.buff, type2.buff, type1.len) == 0;
+			break;
 		case ast.TypeType.EXPR:
-			return (cast(*ast.Expr)type1.data.expr.expr).len == (cast(*ast.Expr)type2.data.expr.expr).len && mem.compare((cast(*ast.Expr)type1.data.expr.expr).buff, (cast(*ast.Expr)type2.data.expr.expr).buff, (cast(*ast.Expr)type1.data.expr.expr).len) == 0;
+			v = (cast(*ast.Expr)type1.data.expr.expr).len == (cast(*ast.Expr)type2.data.expr.expr).len && mem.compare((cast(*ast.Expr)type1.data.expr.expr).buff, (cast(*ast.Expr)type2.data.expr.expr).buff, (cast(*ast.Expr)type1.data.expr.expr).len) == 0;
+			break;
 		case ast.TypeType.POINTER:
-			return self.compareTypes(type1.data.pointer.base, type2.data.pointer.base);
+			v = self.compareTypes(type1.data.pointer.base, type2.data.pointer.base);
+			break;
 		case ast.TypeType.CONST:
-			return self.compareTypes(type1.data.cnst.base, type2.data.cnst.base);
+			v = self.compareTypes(type1.data.cnst.base, type2.data.cnst.base);
+			break;
 		default:
-			return true;
+			v = true;
 		}
+
+		if v {
+			if type1.id != 0 {
+				type2.id = type1.id;
+			} else if type2.id != 0 {
+				type1.id = type2.id;
+			} else {
+				type1.id = self.typeId;
+				type2.id = self.typeId;
+				++self.typeId;
+			}
+			return true;
+		} else {
+			//type1.id = self.typeId++;
+			//type2.id = self.typeId++;
+		}
+		return false;
 	};
 	func compareTypeVec(self: *Analyzer, types1: *void, types2: *void) bool {
 		typeVec1 := cast(vec *ast.Type)types1;
@@ -1342,8 +1377,8 @@ export struct Analyzer {
 		if typeVec1.length != typeVec2.length {
 			return false;
 		}
-
 		i := 0;
+
 		for i < typeVec1.length && self.compareTypes(typeVec1[i], typeVec2[i]) { ++i; }
 		return i == typeVec1.length;
 	};
@@ -1367,7 +1402,9 @@ export func NewAnalyzer(b: [6]i8, l: u16, path: *i8, len: size_t) Analyzer {
 
 		imports:        (vec *Analyzer){},
 		importNames:    (vec *ast.IdentExpr){},
-		unnamedImports: (vec *Analyzer){}
+		unnamedImports: (vec *Analyzer){},
+
+		typeId: 1
 	};
 	mem.copy(a.namespace.buff, b, l);
 	return a;

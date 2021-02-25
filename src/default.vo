@@ -22,7 +22,7 @@ export struct Arguments {
 	length: i32;
 };
 
-func inline (self: *Arguments) template(T) next() T {
+export func inline (self: *Arguments) template(T) next() T {
 	register val: T;
 	__c { val` = va_arg(`self.list`, `T`):` };
 	return val;
