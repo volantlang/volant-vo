@@ -79,6 +79,7 @@ export enum STokenType {
 	REGISTER,
 	AUTO,
 	C_EXTERN,
+	IMPL,
 
 	// TYPES
 	TYPE_START,
@@ -156,14 +157,14 @@ export struct Base {
 };
 
 // do not change the sequence
-export KeywordsNum: u16 = 43;
-export Keywords: [45]*i8 = {
-	"for",    "switch", "if",      "else",     "func",    "struct",  "tuple",  "enum",
-	"case",   "async",  "work",    "import",   "return",  "default", "break",  "continue",
-	"new",    "const",  "vec",     "delete",   "typedef", "cast",    "sizeof", "export",
-	"union",  "static", "capture", "promise",  "goto",    "label",   "await",  "as",
-	"native", "is",     "match",   "template", "generic", "extern",  "__c",    "register",
-	"auto",   "c_extern"
+export KeywordsNum: u16 = 44;
+export Keywords: [50]*i8 = {
+	"for",    "switch",   "if",      "else",     "fn",      "struct",  "tuple",  "enum",
+	"case",   "async",    "work",    "import",   "return",  "default", "break",  "continue",
+	"new",    "const",    "vec",     "delete",   "type",    "cast",    "sizeof", "export",
+	"union",  "static",   "capture", "promise",  "goto",    "label",   "await",  "as",
+	"native", "is",       "match",   "template", "generic", "extern",  "__c",    "register",
+	"auto",   "c_extern", "impl"
 };
 
 // do not change the sequence

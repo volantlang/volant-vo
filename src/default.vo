@@ -3,28 +3,30 @@ export true := cast(bool)1;
 export false := cast(bool)0;
 
 __c {`typedef va_list v1_va_list`};
+// type va_list va_list;
 
-typedef va_list va_list;
-
+/*
 export struct Arguments {
 	list: va_list;
 	length: i32;
 
-	template next(T) func (self: *Arguments) T {
+	template next(T) fn (self: *Arguments) T {
 		register val: T;
 		__c { val` = va_arg(`self.list`, v1_T);` };
 		return val;
 	};
 };
-/*
-export struct Arguments {
+
+export type Arguments struct {
 	list: va_list;
 	length: i32;
 };
 
-export func inline (self: *Arguments) template(T) next() T {
-	register val: T;
-	__c { val` = va_arg(`self.list`, `T`):` };
-	return val;
+impl Arguments {
+	fn next!(T)(self: *Arguments) T {
+		reguster val: T;
+		__c { val` = va_arg(`self.list`, v1_T);` };
+		return val;
+	};
 };
 */

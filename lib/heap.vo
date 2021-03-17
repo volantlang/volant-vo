@@ -1,8 +1,8 @@
 
-export c_extern malloc:  func(size_t) *void;
-export c_extern free:    func(*void);
-export c_extern realloc: func(*void, size_t) *void;
+export c_extern malloc:  fn(size_t) *void;
+export c_extern free:    fn(*void);
+export c_extern realloc: fn(*void, size_t) *void;
 
-export func calloc(size1: size_t, size2: size_t) *void {
+export fn calloc(size1: size_t, size2: size_t) *void {
 	return malloc(size1*size2);
 };

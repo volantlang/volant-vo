@@ -6,7 +6,7 @@ export template Queue(T) struct {
 	last: size_t;
 	size: size_t;
 
-	func init(self: *Queue!(T), size: size_t){
+	fn init(self: *Queue!(T), size: size_t){
 	//	self.data = cast(*T)heap.malloc(size * sizeof(T));
 
 	//	self.size = size;
@@ -14,20 +14,20 @@ export template Queue(T) struct {
 	//	self.first = 0;
 	};
 	/*
-	func enQueue(self: *Queue!(T), data: T){
+	fn enQueue(self: *Queue!(T), data: T){
 		register l := self.last;
 		self.data[l] = data;
 
 		self.last = l == self.size-cast(size_t)1 ? cast(size_t)0 : ++l;
 	};
-	func deQueue(self: *Queue!(T)) T {
+	fn deQueue(self: *Queue!(T)) T {
 		register f := self.first;
 		register r := self.data[f];
 
 		self.first = f == self.size-cast(size_t)1 ? cast(size_t)0 : ++f;
 		return r;
 	};
-	func resize(self: *Queue!(T), size: size_t){
+	fn resize(self: *Queue!(T), size: size_t){
 		self.data = cast(*T)heap.realloc(self.data, size * sizeof(T));
 
 		if self.last < self.first {
@@ -35,13 +35,13 @@ export template Queue(T) struct {
 		}
 		self.size = size;
 	};
-	func getSpace(self: *Queue!(T)) size_t {
+	fn getSpace(self: *Queue!(T)) size_t {
 		return self.last > self.first ? self.last - self.first : self.last + (self.size - self.first);
 	};
-	func isEmpty(self: *Queue!(T)) bool {
+	fn isEmpty(self: *Queue!(T)) bool {
 		return self.first == self.last;
 	};
-	func enQueueAndResize(self: *Queue!(T), data: T){
+	fn enQueueAndResize(self: *Queue!(T), data: T){
 		if self.getSpace() == cast(size_t)0 {
 			self.resize(self.size+cast(size_t)8);
 		}

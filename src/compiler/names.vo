@@ -26,9 +26,8 @@ export func getPrefix(type: NameType) i8 {
 		return 'p';
 	case NameType.IMPORT:
 	case NameType.VAR:
-		return 'v';
 	case NameType.METHOD:
-		return 'm';
+		return 'v';
 	default:
 		return 0;
 	}

@@ -105,8 +105,8 @@ export func search(path1: *i8, len1: size_t, path2: *i8, len2: size_t, pathf: **
 };
 
 export func read(parentPath: *i8, parentPathLen: size_t, path: *i8, pathLen: size_t, newPathPtr: **i8, newLenPtr: *size_t) *void {
-//	io.print("compiling ");
-//	io.printnln(path, pathLen);
+	io.print("compiling ");
+	io.printnln(path, pathLen);
 
 	newPath: *i8;
 	newLen: size_t;

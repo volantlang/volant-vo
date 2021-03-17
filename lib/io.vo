@@ -1,23 +1,23 @@
-c_extern putchar: func(i32) i32;
+c_extern putchar: fn(i32) i32;
 
-export func print(str: *i8){
+export fn print(str: *i8){
 	for c: i8 = *str; c != cast(i8)0; c = *(++str) {
 		putchar(c);
 	}
 };
 
-export func println(str: *i8){
+export fn println(str: *i8){
 	print(str);
 	putchar('\n');
 };
 
-export func printn(str: *i8, len: size_t){
+export fn printn(str: *i8, len: size_t){
 	for len-- != cast(size_t)0 {
 		putchar(*str++);
 	}
 };
 
-export func printnln(str: *i8, len: size_t){
+export fn printnln(str: *i8, len: size_t){
 	printn(str, len);
 	putchar('\n');
 };

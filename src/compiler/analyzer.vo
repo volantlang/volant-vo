@@ -50,6 +50,7 @@ export struct Analyzer {
 	path:    Buff;
 	context: AnalyzerContext;
 	symbols: *symbols.SymbolTable;
+	top:     *symbols.SymbolTable;
 
 	imports:        vec *Analyzer;
 	importNames:    vec *ast.IdentExpr;
@@ -145,6 +146,23 @@ export struct Analyzer {
 		}
 		return null;
 	};
+	func getTypeIndex(self: *Analyzer, name: *i8, len: size_t) i32 {
+		i := self.top.getTypeIndexInCurr(name, len);
+
+		if i == -1 {
+			self.error("{name} type not defined");
+		}
+		return i;
+	};
+	func getTypeIndexNoError(self: *Analyzer, name: *i8, len: size_t) i32 {
+		return self.top.getTypeIndexInCurr(name, len);
+	};
+	func getTypeFromIndex(self: *Analyzer, i: size_t) *ast.Type {
+		return self.top.types.types[i];
+	};
+	func getImplFromIndex(self: *Analyzer, i: size_t) ast.ImplData {
+		return self.top.types.impls[i];
+	};
 	func getExportedTypeNoError(self: *Analyzer, name: *i8, len: size_t) *ast.Type {
 		if v := self.exports.getType(name, len); v != null {
 			return v;
@@ -202,6 +220,10 @@ export struct Analyzer {
 				self.exports.addType(tdef.name.tok.buff, tdef.name.tok.len, tdef.type);
 			}
 		}
+		for i = 0; i < file.impls.length; ++i {
+			s := file.impls[i];
+			self.impll1(s.data.impll);
+		}
 		for i = 0; i < file.funcs.length; ++i {
 			s := file.funcs[i];
 			fnc := *cast(*ast.FuncDec)(&s.stmt.data.funcDec);
@@ -239,7 +261,6 @@ export struct Analyzer {
 	};
 	func postImports(self: *Analyzer, file: ast.File) {
 		i: i32;
-
 		for i = 0; i < file.tdefs.length; ++i {
 			s := file.tdefs[i];
 			self.tdefNoAdd(s.stmt.data.tdef);
@@ -248,12 +269,13 @@ export struct Analyzer {
 			s := file.decs[i];
 			self.dec(s.stmt.data.dec);
 		}
+		for i = 0; i < file.impls.length; ++i {
+			s := file.impls[i];
+			self.impll2(s.data.impll);
+		}
 		for i = 0; i < file.funcs.length; ++i {
 			s := file.funcs[i];
-
-			self.pushScope();
 			self.funcDecNoAdd(s.stmt.data.funcDec);
-			self.popScope();
 		}
 	};
 	func globalStmt(self: *Analyzer, stmt: *ast.Stmt){
@@ -300,6 +322,12 @@ export struct Analyzer {
 		case ast.StmtType.LOOP:
 			self.loop(stmt);
 			break;
+		case ast.StmtType.SWITCH:
+			self.swtch(stmt);
+			break;
+		case ast.StmtType.MATCH:
+			self.mtch(stmt);
+			break;
 		case ast.StmtType.RETURN:
 			self.rturn(stmt);
 			break;
@@ -308,6 +336,12 @@ export struct Analyzer {
 			break;
 		case ast.StmtType.GCASE:
 			self.genericCase(stmt);
+			break;
+		case ast.StmtType.SCASE:
+			self.switchCase(stmt);
+			break;
+		case ast.StmtType.MCASE:
+			self.matchCase(stmt);
 			break;
 		case ast.StmtType.__C:
 			self.___c(stmt);
@@ -332,8 +366,10 @@ export struct Analyzer {
 			goto next;
 		}
 
+		s := symbols.NewSymbolTable(null);
 		a = new Analyzer{
-			symbols:        symbols.NewSymbolTable(null),
+			symbols:        s,
+			top:            s,
 			heap:           (vec *void){},
 			namespace:      importer.getNextNameSpace(),
 
@@ -391,16 +427,26 @@ export struct Analyzer {
 	};
 	func tdefNoAdd(self: *Analyzer, tdef: ast.Typedef){
 		self.ident(tdef.name);
-	//	/*
-		if tdef.type.type == ast.TypeType.STRUCT {
-			tdef.type.data.strct.name = tdef.name;
-		}
-	//	*/
 		self.type(tdef.type);
 	};
 	func tdef(self: *Analyzer, tdef: ast.Typedef){
 		self.tdefNoAdd(tdef);
 		self.addType(tdef.name.tok.buff, tdef.name.tok.len, tdef.type);
+	};
+	func impll1(self: *Analyzer, impll: ast.Impl){
+		self.assert(impll.type.type == ast.TypeType.EXPR, "aa");
+
+		e := cast(*ast.Expr)impll.type.data.expr.expr;
+		i := self.getTypeIndex(e.buff, e.len);
+
+		if self.symbols.updateImpl(i, impll.data) == null {
+			io.println("aaaaaaaaa");
+		}
+	};
+	func impll2(self: *Analyzer, impll: ast.Impl){
+		for i := 0; i < impll.data.methods.length; ++i {
+			self.funcDecNoAdd(impll.data.methods[i].data.funcDec);
+		}
 	};
 	func decNoAdd(self: *Analyzer, dec: ast.Declaration){
 		l1 := dec.idents.length;
@@ -409,7 +455,6 @@ export struct Analyzer {
 		if dec.values == null {
 			goto next;
 		}
-
 		l3 := dec.values.length;
 
 		if l3 == 1 {
@@ -455,21 +500,46 @@ export struct Analyzer {
 			self.addVar(ident.buff, ident.len, dec.types[i]);
 		}
 	};
-	func funcDecNoBlockNoAdd(self: *Analyzer, fnc: ast.FuncDec){
+	func funcDecNoBlockNoAddNoScope(self: *Analyzer, fnc: ast.FuncDec){
 		self.ident(fnc.name);
 		self.funcType(fnc.type.data.fnc);
 	};
-	func funcDecNoBlock(self: *Analyzer, fnc: ast.FuncDec){
-		self.funcDecNoBlockNoAdd(fnc);
+	func funcDecNoBlockNoScope(self: *Analyzer, fnc: ast.FuncDec){
 		self.addVar(fnc.name.tok.buff, fnc.name.tok.len, fnc.type);
+		self.funcDecNoBlockNoAddNoScope(fnc);
 	};
-	func funcDecNoAdd(self: *Analyzer, fnc: ast.FuncDec){
-		self.funcDecNoBlockNoAdd(fnc);
+	func funcDecNoAddNoScope(self: *Analyzer, fnc: ast.FuncDec){
+		self.funcDecNoBlockNoAddNoScope(fnc);
 		self.block(fnc.body);
 	};
-	func funcDec(self: *Analyzer, fnc: ast.FuncDec){
-		self.funcDecNoBlock(fnc);
+	func funcDecNoScope(self: *Analyzer, fnc: ast.FuncDec){
+		self.funcDecNoBlockNoScope(fnc);
 		self.blockNoScope(fnc.body);
+	};
+	func funcDecNoBlockNoAdd(self: *Analyzer, fnc: ast.FuncDec){
+		self.pushScope();
+		self.ident(fnc.name);
+		self.funcType(fnc.type.data.fnc);
+		self.popScope();
+	};
+	func funcDecNoBlock(self: *Analyzer, fnc: ast.FuncDec){
+		self.addVar(fnc.name.tok.buff, fnc.name.tok.len, fnc.type);
+		self.pushScope();
+		self.funcDecNoBlockNoAdd(fnc);
+		self.popScope();
+	};
+	func funcDecNoAdd(self: *Analyzer, fnc: ast.FuncDec){
+		self.pushScope();
+		self.funcDecNoBlockNoAddNoScope(fnc);
+		self.block(fnc.body);
+		self.popScope();
+	};
+	func funcDec(self: *Analyzer, fnc: ast.FuncDec){
+		self.addVar(fnc.name.tok.buff, fnc.name.tok.len, fnc.type);
+		self.pushScope();
+		self.funcDecNoBlockNoAddNoScope(fnc);
+		self.blockNoScope(fnc.body);
+		self.popScope();
 	};
 	func assign(self: *Analyzer, stmt: *ast.Stmt){
 		assign := *cast(*ast.Assignment)(&stmt.data.assign);
@@ -515,6 +585,40 @@ export struct Analyzer {
 		}
 		self.block(loop.block);
 		self.popScope();
+	};
+	func swtch(self: *Analyzer, stmt: *ast.Stmt){
+		self.context.stack.push(stmt);
+		swtch := *cast(*ast.Switch)(&stmt.data.swtch);
+
+		self.pushScope();
+		if swtch.initStmt != null {
+			self.localStmt(swtch.initStmt);
+		}
+		self.expr(swtch.expr);
+		self.block(swtch.block);
+		self.popScope();
+
+		self.context.stack.pop();
+	};
+	func switchCase(self: *Analyzer, stmt: *ast.Stmt){
+		self.expr(stmt.data.scase.val);
+	};
+	func mtch(self: *Analyzer, stmt: *ast.Stmt){
+		self.context.stack.push(stmt);
+		mtch := *cast(*ast.Match)(&stmt.data.mtch);
+
+		self.pushScope();
+		if mtch.initStmt != null {
+			self.localStmt(mtch.initStmt);
+		}
+		self.expr(mtch.expr);
+		self.block(mtch.block);
+		self.popScope();
+
+		self.context.stack.pop();
+	};
+	func matchCase(self: *Analyzer, stmt: *ast.Stmt){
+		self.pattern(stmt.data.mcase.val);
 	};
 	func tmplateNoAdd(self: *Analyzer, tmplate: ast.Template){
 		self.ident(tmplate.name);
@@ -649,6 +753,12 @@ export struct Analyzer {
 			break;
 		case ast.ExprType.GENERIC:
 			self.genricExpr(expr);
+			break;
+		case ast.ExprType.IS:
+			self.isExpr(expr);
+			break;
+		case ast.ExprType.STMT:
+			self.stmtExpr(expr);
 			break;
 		default:
 			expr.eType = null;
@@ -894,23 +1004,42 @@ export struct Analyzer {
 
 			type = tmplate.datas[genCall.index].type;
 		}
-		type = self.getRootType(type);
+		prop := member.prop;
 
-		switch type.type {
-		case ast.TypeType.STRUCT:
-			goto strctProp;
-		default:
-			expr.println();
-			self.error("meh");
-			break;
+		if type.type != ast.TypeType.EXPR {
+			goto next;
 		}
 
-	label strctProp:
-		prop := member.prop;
+		implData := *cast(*ast.ImplData)&type.data.expr.impls;
+
+		if implData.methods == null {
+			goto next1;
+		}
+
+		for i := 0; i < implData.methods.length; ++i {
+			method := *cast(*ast.FuncDec)(&implData.methods[i].data.funcDec);
+
+			if prop.tok.len == method.name.tok.len && mem.compare(method.name.tok.buff, prop.tok.buff, prop.tok.len) == 0 {
+				expr.eType = implData.methods[i].data.funcDec.type;
+				prop.name.type = names.NameType.METHOD;
+				prop.name.index = (cast(*ast.IdentExpr)implData.methods[i].data.funcDec.name).name.index;
+				return;
+			}
+		}
+
+	label next1:
+		type = self.getRootType(type);
+
+	label next:
+		if type.type != ast.TypeType.STRUCT {
+			expr.println();
+			self.error("meh");
+		}
 		strct := *cast(*ast.StructType)(&type.data.strct);
 
 		i := self.getPropInfo(strct, prop.tok.buff, prop.tok.len);
 
+		/*
 		switch i.type.type {
 		case ast.TypeType.TEMPLATE:
 			prop.name.type = names.NameType.METHOD;
@@ -921,9 +1050,10 @@ export struct Analyzer {
 				break;
 			}
 		default:
-			prop.name.type = names.NameType.STRUCT_PROP;
-			break;
-		}
+		*/
+		prop.name.type = names.NameType.STRUCT_PROP;
+		//	break;
+		// }
 		prop.name.index = i.name;
 		expr.eType = i.type;
 		return;
@@ -999,6 +1129,21 @@ export struct Analyzer {
 		i := 0;
 		for i < genric.conds.length && !self.compareTypes(genric.type, genric.conds[i]) { ++i; }
 		expr.data.genric.index = i;
+	};
+	func isExpr(self: *Analyzer, expr: *ast.Expr){
+		isExpr := *cast(*ast.IsExpr)&expr.data.isExpr;
+
+		self.expr(isExpr.expr);
+		self.pattern(isExpr.pattern);
+	};
+	func stmtExpr(self: *Analyzer, expr: *ast.Expr){
+		stmts := cast(vec *ast.Stmt)expr.data.stmtExpr.stmts;
+
+		self.pushScope();
+		for i := 0; i < stmts.length; ++i {
+			self.localStmt(stmts[i]);
+		}
+		self.popScope();
 	};
 	func genCallType(self: *Analyzer, type: *ast.Type){
 		e := cast(*ast.Expr)type.data.genCall.expr;
@@ -1082,12 +1227,14 @@ export struct Analyzer {
 		expr := cast(*ast.Expr)type.data.expr.expr;
 
 		if expr.type == ast.ExprType.IDENT {
-			t := self.getTypeNoError(expr.buff, expr.len);
+			i := self.getTypeIndexNoError(expr.buff, expr.len);
 
-			if t != null {
+			if i != -1 {
+				t := self.getTypeFromIndex(i);
 				self.var(&expr.data.name);
 
 				if t.labl == 0 {
+					type.data.expr.impls = self.getImplFromIndex(i);
 					expr.eType = t;
 				} else {
 					type.type = t.type;
@@ -1104,7 +1251,7 @@ export struct Analyzer {
 			for i := 0; i < self.unnamedImports.length; ++i {
 				an := self.unnamedImports[i];
 
-				if t = an.getExportedTypeNoError(expr.buff, expr.len); t != null {
+				if t := an.getExportedTypeNoError(expr.buff, expr.len); t != null {
 					an.var(&expr.data.name);
 					expr.eType = t;
 					return;
@@ -1148,20 +1295,32 @@ export struct Analyzer {
 	};
 	func structType(self: *Analyzer, strct: ast.StructType){
 		self.pushScope();
+	/*
 		for i := 0; i < strct.props.length; ++i {
 			self.structProp1(strct.props[i]);
 		}
 		for i := 0; i < strct.props.length; ++i {
 			self.structProp2(strct.props[i]);
 		}
+	*/
+		for i := 0; i < strct.props.length; ++i {
+			dec := *cast(*ast.Declaration)(&strct.props[i].data.dec);
+			self.decNoAdd(dec);
+
+			for i, ident := 0, dec.idents[0]; i < dec.idents.length; ident = dec.idents[++i] {
+				self.addVar(ident.buff, ident.len, dec.types[i]);
+				ident.data.name.index = self.namespace;
+				ident.data.name.type = names.NameType.STRUCT_PROP;
+			}
+		}
 		self.popScope();
 	};
 	func structProp1(self: *Analyzer, stmt: *ast.Stmt){
 		switch stmt.type {
 		case ast.StmtType.FUNC:
-			self.pushScope();
+//			self.pushScope();
 			self.funcDecNoBlockNoAdd(stmt.data.funcDec);
-			self.popScope();
+//			self.popScope();
 
 			ident := cast(*ast.IdentExpr)stmt.data.funcDec.name;
 			ident.name.index = self.namespace;
@@ -1255,6 +1414,63 @@ export struct Analyzer {
 			self.addVar(fnc.varargs.tok.buff, fnc.varargs.tok.len, t);
 		}
 	};
+	func pattern(self: *Analyzer, pattern: *ast.Pattern){
+		switch pattern.type {
+		case ast.PatternType.EXPR:
+			self.expr(pattern.data.expr.expr);
+			break;
+		case ast.PatternType.UNARY:
+			self.expr(pattern.data.unary.expr);
+			break;
+		case ast.PatternType.BINARY:
+			self.pattern(pattern.data.binary.left);
+			self.pattern(pattern.data.binary.right);
+			break;
+		case ast.PatternType.COMP:
+			self.compPattern(pattern);
+			break;
+		case ast.PatternType.ELRANGE:
+			self.elRangePattern(pattern);
+			break;
+		case ast.PatternType.RANGE:
+			self.rangePattern(pattern);
+			break;
+		};
+	};
+	func rangePattern(self: *Analyzer, pattern: *ast.Pattern){
+		l := cast(*ast.Expr)pattern.data.range.left;
+		r := cast(*ast.Expr)pattern.data.range.right;
+
+		if l != null {
+			self.expr(l);
+		}
+		if r != null {
+			self.expr(r);
+		}
+	};
+	func elRangePattern(self: *Analyzer, pattern: *ast.Pattern){
+		self.expr(pattern.data.elRange.len);
+		val := cast(*ast.Pattern)pattern.data.elRange.val;
+
+		if val != null {
+			self.pattern(val);
+		}
+	};
+	func compPattern(self: *Analyzer, pattern: *ast.Pattern){
+		vals := cast(vec *ast.Pattern)pattern.data.comp.values;
+		fields := cast(vec ast.IdentExpr)pattern.data.comp.fields;
+
+		for i := 0; i < vals.length; ++i {
+			self.pattern(vals[i]);
+		}
+		if fields == null {
+			return;
+		}
+		for i, ident := 0, fields[0]; i < fields.length; ident = fields[++i] {
+			ident.name.index = self.namespace;
+			ident.name.type = names.NameType.STRUCT_PROP;
+		}
+	};
 	func pointerToType(self: *Analyzer, type: *ast.Type) *ast.Type {
 		t := new ast.Type{
 			type: ast.TypeType.POINTER,
@@ -1291,6 +1507,7 @@ export struct Analyzer {
 	func getPropInfo(self: *Analyzer, type: ast.StructType, buff: *i8, len: size_t) ast.NamespaceAndType {
 		for i, l := 0, type.props.length; i < l; ++i {
 			s := type.props[i];
+		/*
 			switch s.type {
 			case ast.StmtType.FUNC:
 				goto fnc;
@@ -1313,6 +1530,7 @@ export struct Analyzer {
 			}
 			return (ast.NamespaceAndType){name: ident.name.index, type: s.data.tmplate.type};
 		label dec:
+		*/
 			dec := *cast(*ast.Declaration)(&s.data.dec);
 			for x, ident := 0, dec.idents[0]; x < dec.idents.length; ident = dec.idents[++x] {
 				if ident.len != len || mem.compare(buff, ident.buff, len) != 0 {
@@ -1392,9 +1610,13 @@ export struct Analyzer {
 };
 
 export func NewAnalyzer(b: [6]i8, l: u16, path: *i8, len: size_t) Analyzer {
+	s := symbols.NewSymbolTable(null);
+
 	a := (Analyzer){
 		path:           (Buff){buff: path, len: len},
-		symbols:        symbols.NewSymbolTable(null),
+		symbols:        s,
+		top:            s,
+
 		heap:           (vec *void){},
 		namespace:      (names.NameSpace){len: l},
 		context:        NewAnalyzerContext(),

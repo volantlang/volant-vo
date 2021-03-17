@@ -249,12 +249,6 @@ export struct NodeSOA {
 	idents: BufSOA;
 	types:  vec *ast.Type;
 };
-
-export struct TypeNodeSOA {
-	basic_nodes: NodeSOA;
-	ids:        u64;
-};
-
 export func NewNodeSOA() NodeSOA {
 	return (NodeSOA){
 		idents: NewBufSOA(),
@@ -262,9 +256,22 @@ export func NewNodeSOA() NodeSOA {
 	};
 };
 
+export struct TypeNodeSOA {
+	idents: BufSOA;
+	types:  vec *ast.Type;
+	impls: vec ast.ImplData;
+};
+export func NewTypeNodeSOA() TypeNodeSOA {
+	return (TypeNodeSOA){
+		idents: NewBufSOA(),
+		types: (vec *ast.Type){},
+		impls: (vec ast.ImplData){}
+	};
+};
+
 export struct SymbolTable {
 	variables: NodeSOA;
-	types:     NodeSOA;
+	types:     TypeNodeSOA;
 	labels:    BufSOA;
 
 	parent:    *SymbolTable;
@@ -296,7 +303,18 @@ export struct SymbolTable {
 	func addType(self: *SymbolTable, name: *i8, len: size_t, type: *ast.Type){
 		self.types.idents.ptrs.push(name);
 		self.types.idents.lens.push(len);
+
 		self.types.types.push(type);
+		self.types.impls.push((ast.ImplData){methods: null});
+	};
+	func getTypeIndexInCurr(self: *SymbolTable, name: *i8, len: size_t) i32 {
+		idents := self.types.idents;
+		for i, l := 0, idents.ptrs.length; i < l; ++i {
+			if idents.lens[i] == len && mem.compare(idents.ptrs[i], name, len) == 0 {
+				return i;
+			}
+		}
+		return -1;
 	};
 	func getTypeInCurr(self: *SymbolTable, name: *i8, len: size_t) *ast.Type {
 		idents := self.types.idents;
@@ -314,6 +332,28 @@ export struct SymbolTable {
 			return self.parent.getType(name, len);
 		}
 		return null;
+	};
+	func getImplInCurr(self: *SymbolTable, name: *i8, len: size_t) *ast.ImplData {
+		i := self.getTypeIndexInCurr(name, len);
+		return i == -1 ? null : &self.types.impls[i];
+	};
+	func getImpl(self: *SymbolTable, name: *i8, len: size_t) *ast.ImplData {
+		table := self;
+
+		for table != null {
+			if i := table.getTypeIndexInCurr(name, len); i != -1 {
+				return &table.types.impls[i];
+			}
+			table = table.parent;
+		}
+		return null;
+	};
+	func updateImpl(self: *SymbolTable, i: size_t, data: ast.ImplData) *ast.Type {
+		if self.types.impls[i].methods != null {
+			return null;
+		}
+		self.types.impls[i] = data;
+		return self.types.types[i];
 	};
 	func addLabel(self: *SymbolTable, name: *i8, len: size_t){
 		self.labels.ptrs.push(name);
@@ -339,7 +379,7 @@ export struct SymbolTable {
 	func newChild(self: *SymbolTable) *SymbolTable {
 		s := new SymbolTable{
 			variables: NewNodeSOA(),
-			types:     NewNodeSOA(),
+			types:     NewTypeNodeSOA(),
 			labels:    NewBufSOA(),
 			parent:    self,
 			children:  (vec *SymbolTable){}
@@ -351,7 +391,7 @@ export struct SymbolTable {
 export func NewSymbolTable(parent: *SymbolTable) *SymbolTable {
 	return new SymbolTable{
 		variables: NewNodeSOA(),
-		types:     NewNodeSOA(),
+		types:     NewTypeNodeSOA(),
 		labels:    NewBufSOA(),
 		parent:    parent,
 		children:  (vec *SymbolTable){}

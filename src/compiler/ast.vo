@@ -7,6 +7,7 @@ export enum ExprType {
 	IS,
 	NEW,
 	FUNC,
+	STMT,
 	CALL,
 	CAST,
 	AWAIT,
@@ -71,6 +72,12 @@ export struct FuncType {
 export struct Block {
 	stmts: vec *Stmt;
 };
+
+export struct ImplData {
+	methods: vec *Stmt;
+};
+
+
 // upto here
 
 export struct UnaryExpr {
@@ -173,6 +180,10 @@ export struct GenericExpr {
 	index:  u16;
 };
 
+export struct StmtExpr {
+	stmts: vec *Stmt;
+};
+
 export union ExprUnion {
 	unary:   UnaryExpr;
 	binary:  BinaryExpr;
@@ -181,6 +192,7 @@ export union ExprUnion {
 	callExpr: CallExpr;
 	sizeExpr: SizeExpr;
 	castExpr: CastExpr;
+	stmtExpr: StmtExpr;
 
 	compLit:   CompLit;
 	arrayLit:  ArrayLit
@@ -229,6 +241,7 @@ export enum TypeType {
 
 export struct BasicExprType {
 	expr: *Expr;
+	impls: ImplData;
 };
 
 export struct ArrayType {
@@ -330,6 +343,7 @@ export enum StmtType {
 	__C,
 	DEC,
 	LOOP,
+	IMPL,
 	EXPR,
 	GOTO,
 	FUNC,
@@ -453,6 +467,15 @@ export struct FuncDec {
 	body: Block;
 };
 
+export struct FuncDecWithTypeParams {
+	name: *IdentExpr;
+	type: *Type;
+	body: Block;
+	typeParams: vec *Type;
+	olds: vec vec *Type;
+	funcs: vec FuncDec;
+};
+
 export struct Label {
 	name: *IdentExpr;
 };
@@ -465,6 +488,12 @@ export struct ExprStmt {
 	expr: *Expr;
 };
 
+export struct Impl {
+	type: *Type;
+	data: ImplData;
+};
+
+/*
 export struct FuncTemplate {
 	typeArgs: vec *Type;
 	fncType:  *Type;
@@ -494,9 +523,6 @@ export struct TemplateMethodTemplate {
 	fncType:    *Type;
 	body:       Block;
 };
-
-export struct Template {
-
 */
 export struct Template {
 	name: *IdentExpr;
@@ -526,6 +552,7 @@ export union StmtUnion {
 	mtch:     Match;
 	tmplate:  Template;
 	genric:   Generic;
+	impll:    Impl;
 };
 
 export struct Stmt {
@@ -614,16 +641,18 @@ export struct File {
 	funcs:     vec ExportableStmt;
 	tdefs:     vec ExportableStmt;
 	tmplates:  vec ExportableStmt;
-	methods:   vec ExportableStmt;
+	impls:     vec *Stmt;
 	___cs:     vec *Stmt;
 	namespace: names.NameSpace;
 };
+
 export func NewFile() File {
 	return (File){
 		decs:     (vec ExportableStmt){},
 		funcs:    (vec ExportableStmt){},
 		tdefs:    (vec ExportableStmt){},
 		tmplates: (vec ExportableStmt){},
+		impls:    (vec *Stmt){},
 		___cs:    (vec *Stmt){},
 		imprts:   (vec *Stmt){}
 	};

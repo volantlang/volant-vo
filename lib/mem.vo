@@ -1,0 +1,6 @@
+
+export fn copy(first: *void, second: *void, size: size_t){
+	for i: size_t = 0; i < size; ++i {
+		(cast(*i8)first)[i] = (cast(*i8)second)[i];
+	}
+};

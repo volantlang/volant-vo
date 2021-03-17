@@ -1,55 +1,69 @@
 import "default.vo";
 import "io.vo";
 import "heap.vo" as heap;
+import "mem.vo" as mem;
 
-export struct CallbackNode {
-	cb:   *func (*void);
+export type CallbackNode struct {
+	cb:   *fn (*void);
 	data: *void;
 };
 
-export struct CallbackQueue {
-	data: *CallbackNode;
+export type CallbackQueue struct {
+	data:  *CallbackNode;
 	first: size_t;
-	last: size_t;
-	size: size_t;
+	last:  size_t;
+	size:  size_t;
+};
 
-	func init(self: *CallbackQueue, size: size_t){
+impl CallbackQueue {
+	fn init(self: *CallbackQueue, size: size_t){
 		self.data = cast(*CallbackNode)heap.malloc(size * sizeof(CallbackNode));
 		self.size = size;
 		self.last = 0;
 		self.first = 0;
 	};
-	func enQueue(self: *CallbackQueue, cb: *func(*void), data: *void){
+	fn enQueue(self: *CallbackQueue, cb: *fn(*void), data: *void){
 		register l := self.last;
+		l = l == self.size ? cast(size_t)0 : l;
 
-		self.data[l] = (CallbackNode){
+		self.data[l] = [CallbackNode;
 			cb: cb,
 			data: data
-		};
-		self.last = l == self.size-cast(size_t)1 ? cast(size_t)0 : ++l;
+		];
+		self.last = ++l;
 	};
-	func deQueue(self: *CallbackQueue) CallbackNode {
+	fn deQueue(self: *CallbackQueue) CallbackNode {
 		register f := self.first;
 		register r := self.data[f];
 
 		self.first = f == self.size-cast(size_t)1 ? cast(size_t)0 : ++f;
 		return r;
 	};
-	func resize(self: *CallbackQueue, size: size_t){
-		self.data = cast(*CallbackNode)heap.realloc(self.data, sizeof(CallbackNode)*size);
-
+	fn resize(self: *CallbackQueue, size: size_t){
+		old := self.data;
+		self.data = cast(*CallbackNode)heap.malloc(sizeof(CallbackNode)*size);
+			
 		if self.last < self.first {
-			self.last = self.last - (size - self.size);
+			mem.copy(cast(*void)self.data, cast(*void)(cast(size_t)old + self.first), self.size - self.first);
+			mem.copy(cast(*void)(cast(size_t)self.data + self.size - self.first), cast(*void)old, self.last);
+
+			self.last = self.size - self.first + self.last;
+		} else if self.last != self.first {
+			mem.copy(cast(*void)self.data, cast(*void)(cast(size_t)old + self.first), self.last - self.first);
+			self.last = self.last - self.first;
 		}
+		self.first = 0;
 		self.size = size;
+
+		heap.free(old);
 	};
-	func getSpace(self: *CallbackQueue) size_t {
-		return self.last > self.first ? self.last - self.first : self.last + (self.size - self.first);
+	fn getSpace(self: *CallbackQueue) size_t {
+		return self.last >= self.first ? self.size - self.last + self.first: self.first - self.last;
 	};
-	func isEmpty(self: *CallbackQueue) bool {
+	fn isEmpty(self: *CallbackQueue) bool {
 		return self.first == self.last;
 	};
-	func enQueueAndResize(self: *CallbackQueue, cb: *func(*void), data: *void){
+	fn enQueueAndResize(self: *CallbackQueue, cb: *fn(*void), data: *void){
 		if self.getSpace() == cast(size_t)0 {
 			self.resize(self.size+cast(size_t)8);
 		}
@@ -57,39 +71,42 @@ export struct CallbackQueue {
 	};
 };
 
-export struct CallbackListNode {
+export type CallbackListNode struct {
 	next: *CallbackListNode;
-	cb:   *func (*void) i32;
+	cb:   *fn (*void) i32;
 	data: *void;
 };
 
-export struct EventLoop {
+export type EventLoop struct {
 	list:       *CallbackListNode;
 	startQueue: CallbackQueue;
-	endQueue:   CallbackQueue;
+	endQueue:   CallbackQueue;	
+};
 
-	func init(self: *EventLoop, startQueueSize: size_t, endQueueSize: size_t){
-		self.list = new (CallbackListNode){
+impl EventLoop {
+	fn init(self: *EventLoop, startQueueSize: size_t, endQueueSize: size_t){
+		self.list = new ([CallbackListNode;
 			cb:   null,
 			data: null,
 			next: null
-		};
+		]);
+
 		self.startQueue.init(startQueueSize);
 		self.endQueue.init(endQueueSize);
 	};
-	func add(self: *EventLoop, cb: *func(*void) i32, data: *void){
+	fn add(self: *EventLoop, cb: *fn(*void) i32, data: *void){
 		register s := self.list.next;
 
-		self.list.next = new (CallbackListNode){
+		self.list.next = new ([CallbackListNode;
 			cb:   cb,
 			data: data,
 			next: s
-		};
+		]);
 	};
-	func hasCallbacks(self: *EventLoop) bool {
+	fn hasCallbacks(self: *EventLoop) bool {
 		return self.list.next != cast(*CallbackListNode)null || !self.startQueue.isEmpty() || !self.endQueue.isEmpty();
 	};
-	func run(self: *EventLoop){
+	fn run(self: *EventLoop){
 		for !self.startQueue.isEmpty() {
 			node := self.startQueue.deQueue();
 			(*node.cb)(node.data);
@@ -112,8 +129,10 @@ export struct EventLoop {
 		}
 	};
 };
-export func NewEventLoop(startQueueSize: size_t, endQueueSize: size_t) EventLoop {
+
+export fn NewEventLoop(startQueueSize: size_t, endQueueSize: size_t) EventLoop {
 	evLoop: EventLoop;
 	evLoop.init(startQueueSize, endQueueSize);
 	return evLoop;
 };
+
